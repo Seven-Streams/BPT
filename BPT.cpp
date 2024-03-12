@@ -151,30 +151,30 @@ private:
       }
       res.datas[find] = to_insert;
       res.now_size++;
-      if(res.now_size == (find + 1)) {
+      if (res.now_size == (find + 1)) {
         int parent = res.parent;
-        if(parent != 0) {
+        if (parent != 0) {
           UpdateIndex(parent, res.datas[find - 1], res.datas[find]);
         }
-      }//说明需要向上更新。
+      } // 说明需要向上更新。
     } else {
-      NodeInsert(to_insert, res.datas[find].son);//并非叶子节点。进一步插入。
-      mydatabase.read(res, pos);//可能该层节点被更新，需要重新读入。
+      NodeInsert(to_insert, res.datas[find].son); // 并非叶子节点。进一步插入。
+      mydatabase.read(res, pos); // 可能该层节点被更新，需要重新读入。
     }
     mydatabase.write(res, pos);
-    if(res.now_size >= (size - 3)) {
-      //Split
+    if (res.now_size >= (size - 3)) {
+      // Split
     }
     return;
   }
   void UpdateIndex(int pos, MyData old_data, MyData new_data) {
-    if(pos == 0) {
+    if (pos == 0) {
       return;
     }
     Node res;
     mydatabase.read(res, pos);
-    for(int i = 0; i < res.now_size; i++) {
-      if(res.datas[i] == old_data) {
+    for (int i = 0; i < res.now_size; i++) {
+      if (res.datas[i] == old_data) {
         new_data.son = res.datas[i].son;
         res.datas[i] = new_data;
         mydatabase.write(res, pos);
@@ -200,38 +200,59 @@ private:
     int to_insert_pos;
     mydatabase.get_info(to_insert_pos, 3);
     to_insert_pos++;
-    new_node.pos = to_insert_pos;//至此，所有新节点已经准备完毕。
+    mydatabase.write_info(to_insert_pos, 3);
+    new_node.pos = to_insert_pos; // 至此，所有新节点已经准备完毕。
     res.left_sibling = new_node.pos;
     MyData index;
     index = new_node.datas[half - 1];
     index.son = to_insert_pos;
-    if(new_node[0].son != 0) {
-      for(int i = 0; i < half; i++) {
+    if (new_node[0].son != 0) {
+      for (int i = 0; i < half; i++) {
         Node to_update;
         mydatabase.read(to_update, new_node[i].son);
         to_update.parent = to_insert_pos;
         mydatabase.write(to_update, new_node[i].son);
       }
-    }//更新所有新节点子节点的父亲。
-    if(res.parent) {
+    } // 更新所有新节点子节点的父亲。
+    if (res.parent) {
       OnlyInsert(res.parent, index, res.datas[now_size - half - 1]);
+    } else {
+      int current;
+      mydatabase.get_info(current, 3);
+      current++;
+      Node new_alloc;
+      new_alloc.now_size = 2;
+      new_alloc.left_sibling = 0;
+      new_alloc.right_sibling = 0;
+      new_alloc.parent = 0;
+      new_alloc.pos = current;
+      new_alloc.datas[0] = res.datas[now_size - half - 1];
+      new_alloc.datas[0].son = res.pos;
+      new_alloc.datas[1] = index;
+      res.parent = current;
+      new_node.parent = current;
+      mydatabase.write(new_alloc, current);
     }
+    mydatabase.write(res, res.pos);
+    mydatabase.write(new_node, new_node.pos);
     return;
   }
   void OnlyInsert(int pos, MyData to_insert, MyData old_index) {
     Node res;
     mydatabase.read(res, pos);
     int find = 0;
-    for(find = 0; find < res.now_size; find++) {
-      if(old_index == res.datas[find]) {
+    for (find = 0; find < res.now_size; find++) {
+      if (old_index == res.datas[find]) {
         break;
       }
     }
-    std::memmove(res.datas[find + 1], res.datas[find], (res.now_size - find + 1));
+    std::memmove(res.datas[find + 1], res.datas[find],
+                 (res.now_size - find + 1));
     res.datas[find] = to_insert;
     mydatabase.write(res, pos);
     return;
   }
+
 public:
   BPT() = default;
   BPT(std::string name) { mydatabase.ChangeName(name); }
