@@ -205,9 +205,6 @@ private:
     MyData index;
     index = new_node.datas[half - 1];
     index.son = to_insert_pos;
-    int new_root = OnlyInsert(res.parent, index);
-    res.parent = new_root;
-    new_node.parent = new_root;
     if(new_node[0].son != 0) {
       for(int i = 0; i < half; i++) {
         Node to_update;
@@ -216,6 +213,23 @@ private:
         mydatabase.write(to_update, new_node[i].son);
       }
     }//更新所有新节点子节点的父亲。
+    if(res.parent) {
+      OnlyInsert(res.parent, index, res.datas[now_size - half - 1]);
+    }
+    return;
+  }
+  void OnlyInsert(int pos, MyData to_insert, MyData old_index) {
+    Node res;
+    mydatabase.read(res, pos);
+    int find = 0;
+    for(find = 0; find < res.now_size; find++) {
+      if(old_index == res.datas[find]) {
+        break;
+      }
+    }
+    std::memmove(res.datas[find + 1], res.datas[find], (res.now_size - find + 1));
+    res.datas[find] = to_insert;
+    mydatabase.write(res, pos);
     return;
   }
 public:
