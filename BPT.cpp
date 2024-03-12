@@ -156,9 +156,15 @@ private:
         if(parent != 0) {
           UpdateIndex(parent, res.datas[find - 1], res.datas[find]);
         }
-      }
+      }//说明需要向上更新。
     } else {
+      NodeInsert(to_insert, res.datas[find].son);
     }
+    if(res.now_size >= (size - 3)) {
+      //Split
+    }
+    mydatabase.write(res, pos);
+    return;
   }
   void UpdateIndex(int pos, MyData old_data, MyData new_data) {
     if(pos == 0) {
