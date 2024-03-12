@@ -92,9 +92,9 @@ unsigned long long MyHash(std::string txt, unsigned long long exp) {
   }
   return ans;
 }
-template <class Value = int, int size = 70> class BPT {
+template <class Value = int, int size = 1000> class BPT {
 private:
-  std::string file = "database.txt";
+  std::string file = "database";
   struct MyData {
     unsigned long long hash1 = 0;
     unsigned long long hash2 = 0;
@@ -154,20 +154,17 @@ private:
       }
       res.datas[find] = to_insert;
       res.now_size++;
-      if (res.now_size == (find + 1)) {
-        int parent = res.parent;
-        if (parent != 0) {
-          UpdateIndex(parent, res.datas[find - 1], res.datas[find]);
-        }
-      } // 说明需要向上更新。
+      mydatabase.write(res, pos);
     } else {
       if (find == (res.now_size)) {
         find--;
+        auto  x = to_insert;
+        x.son = res.datas[find].son;
+        res.datas[find] = x;
+        mydatabase.write(res, pos);
       }
       NodeInsert(to_insert, res.datas[find].son); // 并非叶子节点。进一步插入。
-      mydatabase.read(res, pos); // 可能该层节点被更新，需要重新读入。
     }
-    mydatabase.write(res, pos);
     if (res.now_size >= (size - 3)) {
       Split(res.pos);
     }
@@ -303,7 +300,7 @@ public:
     mydatabase.get_info(total, 1);
     mydatabase.get_info(root, 2);
     if (total == 0) {
-      std::cout << "null" << std::endl;
+      std::cout << "null" << '\n';
       return false;
     }
     Node res;
@@ -328,7 +325,7 @@ public:
       }
     }
     if (found == res.now_size) {
-            std::cout << "null" << std::endl;
+            std::cout << "null" << '\n';
       return 0;
     }
     while ((hash_1 == res.datas[found].hash1) &&
@@ -337,14 +334,14 @@ public:
       found++;
       if (found == res.now_size) {
         if (res.right_sibling == 0) {
-          std::cout << std::endl;
+          std::cout << '\n';
           return 1;
         }
         mydatabase.read(res, res.right_sibling);
         found = 0;
       }
     }
-    std::cout << std::endl;
+    std::cout << '\n';
     return 1;
   }
   void Print() {
@@ -353,13 +350,13 @@ public:
     mydatabase.get_info(total, 1);
     mydatabase.get_info(root, 2);
     mydatabase.get_info(current, 3);
-    std::cout << total << ' ' << root << ' ' << current << std::endl;
+    std::cout << total << ' ' << root << ' ' << current << '\n';
     Node to_print;
     for (int i = 1; i <= current; i++) {
       mydatabase.read(to_print, i);
       std::cout << to_print.pos << ' ' << to_print.now_size << ' '
                 << to_print.left_sibling << ' ' << to_print.right_sibling << ' '
-                << to_print.parent << std::endl;
+                << to_print.parent << '\n';
     }
     return;
   }
@@ -369,7 +366,7 @@ public:
     Node res;
     mydatabase.read(res, root);
     for (int i = 0; i < res.now_size; i++) {
-      std::cout << res.datas[i].value << ' ' << res.datas[i].son << std::endl;
+      std::cout << res.datas[i].value << ' ' << res.datas[i].son << '\n';
     }
     return;
   }
@@ -383,18 +380,18 @@ public:
     }
     int big = -1;
     while (res.right_sibling) {
-      std::cout << res.datas[res.now_size - 1].value << ' ' << big << std::endl;
+      std::cout << res.datas[res.now_size - 1].value << ' ' << big << '\n';
       big = res.datas[res.now_size - 1].value;
       mydatabase.read(res, res.right_sibling);
     }
-    std::cout << res.datas[res.now_size - 1].value << ' ' << big << std::endl;
+    std::cout << res.datas[res.now_size - 1].value << ' ' << big << '\n';
     return;
   }
   void Output() {
     for (int i = 1; i <= 30; i++) {
       Node res;
       mydatabase.read(res, i);
-      std::cout << i << ' ' << res.datas[0].value << std::endl;
+      std::cout << i << ' ' << res.datas[0].value << '\n';
     }
     return;
   }
@@ -402,9 +399,9 @@ public:
     Node x;
     mydatabase.read(x, pos);
     std::cout << x.pos << ' ' << x.parent << ' ' << x.left_sibling << ' '
-              << x.right_sibling << ' ' << x.now_size << std::endl;
+              << x.right_sibling << ' ' << x.now_size << '\n';
     for (int i = 0; i < x.now_size; i++) {
-      std::cout << x.datas[i].value << std::endl;
+      std::cout << x.datas[i].value << '\n';
     }
   }
   bool Erase(unsigned long long hash1, unsigned long long hash2, int value) {
@@ -488,6 +485,7 @@ public:
 };
 
 int main() {
+  std::ios::sync_with_stdio(false);
   BPT<int> test("database");
   int n;
   std::cin >> n;
