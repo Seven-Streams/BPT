@@ -146,7 +146,7 @@ private:
     }
     if (res.datas[find].son == 0) {
       if (find != res.now_size) {
-        std::memmove(res.datas[find + 1], res.datas[find],
+        std::memmove(&res.datas[find + 1], &res.datas[find],
                      (res.now_size - find) * sizeof(MyData));
       }
       res.datas[find] = to_insert;
@@ -158,12 +158,13 @@ private:
         }
       }//说明需要向上更新。
     } else {
-      NodeInsert(to_insert, res.datas[find].son);
+      NodeInsert(to_insert, res.datas[find].son);//并非叶子节点。进一步插入。
+      mydatabase.read(res, pos);//可能该层节点被更新，需要重新读入。
     }
+    mydatabase.write(res, pos);
     if(res.now_size >= (size - 3)) {
       //Split
     }
-    mydatabase.write(res, pos);
     return;
   }
   void UpdateIndex(int pos, MyData old_data, MyData new_data) {
@@ -183,7 +184,40 @@ private:
     }
     return;
   }
-
+  void Split(int pos) {
+    Node res;
+    Node new_node;
+    mydatabase.read(res, pos);
+    int now_size = res.now_size;
+    int half = now_size / 2;
+    std::memmove(&new_node.datas[0], &res.datas[0], half * sizeof(MyData));
+    std::memmove(&res.datas[0], &res[half], (now_size - half) * sizeof(MyData));
+    res.now_size = (now_size - half);
+    new_node.now_size = half;
+    new_node.left_sibling = res.left_sibling;
+    new_node.right_sibling = res.pos;
+    new_node.parent = res.parent;
+    int to_insert_pos;
+    mydatabase.get_info(to_insert_pos, 3);
+    to_insert_pos++;
+    new_node.pos = to_insert_pos;//至此，所有新节点已经准备完毕。
+    res.left_sibling = new_node.pos;
+    MyData index;
+    index = new_node.datas[half - 1];
+    index.son = to_insert_pos;
+    int new_root = OnlyInsert(res.parent, index);
+    res.parent = new_root;
+    new_node.parent = new_root;
+    if(new_node[0].son != 0) {
+      for(int i = 0; i < half; i++) {
+        Node to_update;
+        mydatabase.read(to_update, new_node[i].son);
+        to_update.parent = to_insert_pos;
+        mydatabase.write(to_update, new_node[i].son);
+      }
+    }//更新所有新节点子节点的父亲。
+    return;
+  }
 public:
   BPT() = default;
   BPT(std::string name) { mydatabase.ChangeName(name); }
@@ -217,5 +251,6 @@ public:
 
 int main() {
   BPT<int> test("database");
+  test.Insert(1, 2, 3);
   return 0;
 }
