@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <type_traits>
 const unsigned long long exp1 = 13331, exp2 = 131;
 const int minus_max = -2147483648;
 const int maxn = 2147483647;
@@ -302,6 +303,7 @@ public:
     mydatabase.get_info(total, 1);
     mydatabase.get_info(root, 2);
     if (total == 0) {
+      std::cout << "null" << std::endl;
       return false;
     }
     Node res;
@@ -319,27 +321,30 @@ public:
       }
     }
     int found = 0;
-    for (int found = 0; found < res.now_size; found++) {
+    for (found = 0; found < res.now_size; found++) {
       if ((hash_1 == res.datas[found].hash1) &&
           (hash_2 == res.datas[found].hash2)) {
         break;
       }
     }
     if (found == res.now_size) {
+            std::cout << "null" << std::endl;
       return 0;
     }
     while ((hash_1 == res.datas[found].hash1) &&
            (hash_2 == res.datas[found].hash2)) {
-      std::cout << res.datas[found].value << std::endl;
+      std::cout << res.datas[found].value << ' ';
       found++;
       if (found == res.now_size) {
         if (res.right_sibling == 0) {
+          std::cout << std::endl;
           return 1;
         }
         mydatabase.read(res, res.right_sibling);
         found = 0;
       }
     }
+    std::cout << std::endl;
     return 1;
   }
   void Print() {
@@ -437,24 +442,88 @@ public:
         }
         search.now_size--;
         if(search.now_size == 0) {
-          //deleteblock
+          DeleteParentNode(search.parent, search.pos);
+          if(search.left_sibling != 0) {
+            Node left_s;
+            mydatabase.read(left_s, search.left_sibling);
+            left_s.right_sibling = search.right_sibling;
+            mydatabase.write(left_s, search.left_sibling);
+          }
+          if(search.right_sibling != 0) {
+            Node right_s;
+            mydatabase.read(right_s, search.right_sibling);
+            right_s.left_sibling = search.left_sibling;
+            mydatabase.write(right_s, search.right_sibling);
+          }
         }
         mydatabase.write(search, search.pos);
+        total--;
+        mydatabase.write_info(total, 1);
         return true;
       }
     }
     return false;
   }
+  void DeleteParentNode(int pos, int to_delete) {
+    if(pos == 0) {
+      return;
+    }
+    Node to_check;
+    mydatabase.read(to_check, pos);
+    for(int i = 0; i < to_check.now_size; i++) {
+      if(to_check.datas[i].son == to_delete) {
+        if(i != (to_check.now_size - 1)) {
+          std::memmove(&to_check.datas[i], &to_check.datas[i + 1], 
+          sizeof(MyData) * (to_check.now_size - i - 1));
+        }
+        to_check.now_size--;
+        mydatabase.write(to_check, pos);
+        if(to_check.now_size == 0) {
+          DeleteParentNode(to_check.parent, to_check.pos);
+        }
+        return;
+      }
+    }
+  }
 };
 
 int main() {
   BPT<int> test("database");
-  for (int i = 100; i >= 0; i--) {
-    test.Insert(1, 2, i);
+  int n;
+  std::cin >> n;
+  std::string op;
+  for(int i = 0; i < n; i++) {
+    std::cin >> op;
+    if(op == "insert") {
+      std::string index;
+      int value;
+      std::cin >> index;
+      std::cin >> value;
+      unsigned long long hash1, hash2;
+      hash1 = MyHash(index, exp1);
+      hash2 = MyHash(index, exp2);
+      test.Insert(hash1, hash2, value);
+      continue;
+    }
+    if(op == "find") {
+      std::string index;
+      std::cin >> index;
+      unsigned long long hash1, hash2;
+      hash1 = MyHash(index, exp1);
+      hash2 = MyHash(index, exp2);
+      test.find(hash1, hash2);
+      continue;
+    }
+    if(op == "delete") {
+      std::string index;
+      int value;
+      std::cin >> index;
+      std::cin >> value;
+      unsigned long long hash1, hash2;
+      hash1 = MyHash(index, exp1);
+      hash2 = MyHash(index, exp2);
+      test.Erase(hash1, hash2, value);
+    }
   }
-  for(int i = 30; i <= 50; i++) {
-    test.Erase(1, 2, i);
-  }
-  test.find(1, 2);
   return 0;
 }
