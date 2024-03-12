@@ -85,7 +85,7 @@ unsigned long long MyHash(std::string txt, unsigned long long exp) {
   }
   return ans;
 }
-template <class Key, class Value, int size = 70> class BPT {
+template <class Value = int, int size = 70> class BPT {
 private:
   std::string file = "database.txt";
   struct MyData {
@@ -104,4 +104,17 @@ private:
   };
   MemoryRiver<Node, 3> mydatabase;
 public:
+  BPT() = default;
+  BPT(std::string name) {
+    mydatabase.ChangeName(name);
+  }
+  ~BPT() = default;
+  MyData Insert() {
+    
+  }
 };
+
+int main() {
+  BPT<int> test("database");
+  return 0;
+}
