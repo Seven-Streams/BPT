@@ -5,8 +5,8 @@
 #include <iostream>
 #include <string>
 const unsigned long long exp1 = 13331, exp2 = 131;
-template <class W, int info_len = 3> class MemoryRiver {//应当采取3个参数。
-//一个存储目前的元素个数，一个存储目前的根节点，一个存储当前的块应该写入到哪里。
+template <class W, int info_len = 3> class MemoryRiver { // 应当采取3个参数。
+  // 一个存储目前的元素个数，一个存储目前的根节点，一个存储当前的块应该写入到哪里。
 private:
   std::fstream file;
   std::string file_name;   // 文件名。
@@ -97,36 +97,34 @@ private:
     unsigned long long hash2 = 0;
     int value = 0;
     int son = 0;
-    bool operator>(const MyData& other) {
-      if(hash1 != other.hash1) {
+    bool operator>(const MyData &other) {
+      if (hash1 != other.hash1) {
         return hash1 > other.hash1;
       }
-      if(hash2 != other.hash2) {
+      if (hash2 != other.hash2) {
         return hash2 > other.hash2;
       }
       return value > other.value;
     }
-    bool operator<(const MyData& other) {
-      if(hash1 != other.hash1) {
+    bool operator<(const MyData &other) {
+      if (hash1 != other.hash1) {
         return hash1 < other.hash1;
       }
-      if(hash2 != other.hash2) {
+      if (hash2 != other.hash2) {
         return hash2 < other.hash2;
       }
       return value < other.value;
     }
-        bool operator==(const MyData& other) {
-      if(hash1 != other.hash1) {
+    bool operator==(const MyData &other) {
+      if (hash1 != other.hash1) {
         return false;
       }
-      if(hash2 != other.hash2) {
+      if (hash2 != other.hash2) {
         return false;
       }
       return value == other.value;
     }
-    bool operator!=(const MyData& other) {
-      return !(*this == other);
-    }
+    bool operator!=(const MyData &other) { return !(*this == other); }
   };
   struct Node {
     MyData datas[size];
@@ -137,29 +135,57 @@ private:
     int pos = 0;
   };
   MemoryRiver<Node, 3> mydatabase;
-  MyData NodeInsert(MyData to_insert, int pos, int &flag) {
+  void NodeInsert(MyData to_insert, int pos) {
     Node res;
     mydatabase.read(res, pos);
     int find = 0;
-    for(find = 0; find < res.now_size; find++) {
-      if(res.datas[find] > to_insert) {
+    for (find = 0; find < res.now_size; find++) {
+      if (res.datas[find] > to_insert) {
         break;
       }
     }
-    if(find == (res.now_size - 1)) {
-      find--;
-    }//说明已经到头了。
+    if (res.datas[find].son == 0) {
+      if (find != res.now_size) {
+        std::memmove(res.datas[find + 1], res.datas[find],
+                     (res.now_size - find) * sizeof(MyData));
+      }
+      res.datas[find] = to_insert;
+      res.now_size++;
+      if(res.now_size == (find + 1)) {
+        int parent = res.parent;
+        if(parent != 0) {
+          UpdateIndex(parent, res.datas[find - 1], res.datas[find]);
+        }
+      }
+    } else {
+    }
   }
+  void UpdateIndex(int pos, MyData old_data, MyData new_data) {
+    if(pos == 0) {
+      return;
+    }
+    Node res;
+    mydatabase.read(res, pos);
+    for(int i = 0; i < res.now_size; i++) {
+      if(res.datas[i] == old_data) {
+        new_data.son = res.datas[i].son;
+        res.datas[i] = new_data;
+        mydatabase.write(res, pos);
+        UpdateIndex(res.parent, old_data, new_data);
+        return;
+      }
+    }
+    return;
+  }
+
 public:
   BPT() = default;
-  BPT(std::string name) {
-    mydatabase.ChangeName(name);
-  }
+  BPT(std::string name) { mydatabase.ChangeName(name); }
   ~BPT() = default;
   void Insert(unsigned long long hash1, unsigned long long hash2, int value) {
     int total = 0;
     mydatabase.get_info(total, 1);
-    if(total == 0) {
+    if (total == 0) {
       Node res1;
       res1.datas[0].hash1 = hash1;
       res1.datas[0].hash2 = hash2;
@@ -177,8 +203,7 @@ public:
       res.hash1 = hash1;
       res.hash2 = hash2;
       res.value = value;
-      bool flag = 0;
-      NodeInsert(res, root, flag);
+      NodeInsert(res, root);
     }
     return;
   }
