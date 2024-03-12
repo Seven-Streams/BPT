@@ -1,12 +1,15 @@
+#include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
-#include <fstream>
-#include <filesystem>
-const unsigned long long mode1 = 13331, mode2 = 131;
-template <class W, int info_len = 2> class MemoryRiver {
+const unsigned long long exp1 = 13331, exp2 = 131;
+template <class W, int info_len = 3> class MemoryRiver {//应当采取3个参数。
+//一个存储目前的元素个数，一个存储目前的根节点，一个存储当前的块应该写入到哪里。
 private:
   std::fstream file;
-  std::string file_name;        // 文件名。
+  std::string file_name;   // 文件名。
   int sizeofT = sizeof(W); // W的大小。
 
 public:
@@ -16,10 +19,14 @@ public:
     initialise();
     return;
   }
+  void ChangeName(std::string res) {
+    file_name = res;
+    initialise();
+  }
 
   void
   initialise() { // 如果文件不存在，则会进行初始化操作，建立文件并初始化参数。
-  std::filesystem::path test(file_name);
+    std::filesystem::path test(file_name);
     if (std::filesystem::exists(test)) {
       return;
     }
@@ -70,6 +77,31 @@ public:
     return;
   }
 };
-int main() {
-  
+unsigned long long MyHash(std::string txt, unsigned long long exp) {
+  unsigned long long ans = 0;
+  for (int i = 0; i < txt.size(); i++) {
+    ans *= exp;
+    ans += txt[i];
+  }
+  return ans;
 }
+template <class Key, class Value, int size = 70> class BPT {
+private:
+  std::string file = "database.txt";
+  struct MyData {
+    unsigned long long hash_1 = 0;
+    unsigned long long hash_2 = 0;
+    int value = 0;
+    int son = 0;
+  };
+  struct Node {
+    MyData datas[size];
+    int parent = 0;
+    int left_sibling = 0;
+    int right_sibling = 0;
+    int now_size = 0;
+    int pos = 0;
+  };
+  MemoryRiver<Node, 3> mydatabase;
+public:
+};
