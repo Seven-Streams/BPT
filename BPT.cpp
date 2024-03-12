@@ -417,7 +417,7 @@ public:
     mydatabase.read(search, root);
     while (search.datas[0].son != 0) {
       for (int i = 0; i < search.now_size; i++) {
-        if (search.datas[i] > to_delete) {
+        if ((search.datas[i] > to_delete) || (search.datas[i] == to_delete)) {
           mydatabase.read(search, search.datas[i].son);
           break;
         }
@@ -432,19 +432,28 @@ public:
           UpdateIndex(search.parent, search.datas[search.now_size - 1],
                       search.datas[search.now_size - 2]);
         } else {
-          memmove(search.datas[i], search.datas[i + 1],
+          std::memmove(&search.datas[i], &search.datas[i + 1],
                   (search.now_size - i - 1) * sizeof(MyData));
         }
         search.now_size--;
+        if(search.now_size == 0) {
+          //deleteblock
+        }
+        mydatabase.write(search, search.pos);
+        return true;
       }
     }
+    return false;
   }
 };
 
 int main() {
   BPT<int> test("database");
-  for (int i = 1000; i >= 0; i--) {
+  for (int i = 100; i >= 0; i--) {
     test.Insert(1, 2, i);
+  }
+  for(int i = 30; i <= 50; i++) {
+    test.Erase(1, 2, i);
   }
   test.find(1, 2);
   return 0;
