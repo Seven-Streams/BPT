@@ -360,6 +360,9 @@ public:
     }
     return;
   }
+  void Borrow(Node target) {
+    
+  }
   void PrintRoot() {
     int root;
     mydatabase.get_info(root, 2);
