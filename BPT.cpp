@@ -407,16 +407,43 @@ public:
     to_delete.hash1 = hash1;
     to_delete.hash2 = hash2;
     to_delete.value = value;
-    int root;
+    int root, total;
+    mydatabase.get_info(total, 1);
     mydatabase.get_info(root, 2);
-    Node root_info;
-    mydatabase.read(root_info, root);
+    if (total == 0) {
+      return false;
+    }
+    Node search;
+    mydatabase.read(search, root);
+    while (search.datas[0].son != 0) {
+      for (int i = 0; i < search.now_size; i++) {
+        if (search.datas[i] > to_delete) {
+          mydatabase.read(search, search.datas[i].son);
+          break;
+        }
+        if (i == (search.now_size - 1)) {
+          return false;
+        } // 已经检索到最后，说明不存在。
+      }
+    }
+    for (int i = 0; i < search.now_size; i++) {
+      if (to_delete == search.datas[i]) {
+        if (i == (search.now_size - 1)) {
+          UpdateIndex(search.parent, search.datas[search.now_size - 1],
+                      search.datas[search.now_size - 2]);
+        } else {
+          memmove(search.datas[i], search.datas[i + 1],
+                  (search.now_size - i - 1) * sizeof(MyData));
+        }
+        search.now_size--;
+      }
+    }
   }
 };
 
 int main() {
   BPT<int> test("database");
-  for(int i = 1000; i >= 0 ; i--) {
+  for (int i = 1000; i >= 0; i--) {
     test.Insert(1, 2, i);
   }
   test.find(1, 2);
