@@ -5,6 +5,7 @@
 #include <iostream>
 #include <string>
 const unsigned long long exp1 = 13331, exp2 = 131;
+const int minus_max = -2147483648;
 template <class W, int info_len = 3> class MemoryRiver { // 应当采取3个参数。
   // 一个存储目前的元素个数，一个存储目前的根节点，一个存储当前的块应该写入到哪里。
 private:
@@ -232,6 +233,8 @@ private:
       res.parent = current;
       new_node.parent = current;
       mydatabase.write(new_alloc, current);
+      mydatabase.write_info(current, 2);
+      mydatabase.write_info(current, 3);
     }
     mydatabase.write(res, res.pos);
     mydatabase.write(new_node, new_node.pos);
@@ -279,6 +282,62 @@ public:
       res.hash2 = hash2;
       res.value = value;
       NodeInsert(res, root);
+      total++;
+      mydatabase.write_info(total, 1);
+    }
+    return;
+  }
+  bool find(unsigned long long hash_1, unsigned long long hash_2) {
+    int root, total;
+    mydatabase.get_info(total, 1);
+    mydatabase.get_info(root, 2);
+    if(total == 0) {
+      return false;
+    }
+    Node res;
+    MyData to_find;
+    to_find.hash1 = hash_1;
+    to_find.hash2 = hash_2;
+    to_find.value = minus_max;
+    mydatabase.read(res, root);
+    while(res.datas[0].son != 0) {
+      for(int i = 0; i < res.now_size; i++) {
+        if(to_find < res.datas[i]) {
+          mydatabase.read(res, res.datas[i].son);
+          break;
+        }
+      }
+    }
+    int found = 0;
+    for(int found = 0; found < res.now_size; found++) {
+      if((hash_1 == res.datas[found].hash1) && (hash_2 == res.datas[found].hash2)) {
+        break;
+      }
+    }
+    if(found == res.now_size) {
+      return 0;
+    }
+    while((hash_1 == res.datas[found].hash1) && (hash_2 == res.datas[found].hash2)) {
+      std::cout << res.datas[found].value << std::endl;
+      found++;
+      if(found == res.now_size) {
+        if(res.right_sibling == 0) {
+          return 1;
+        }
+        mydatabase.read(res, res.right_sibling);
+        found = 0;
+      }
+    }
+    return 1;
+  }
+  void Print() {
+    int current;
+    mydatabase.get_info(current, 3);
+    Node to_print;
+    for(int i = 1; i <= 3; i++) {
+      mydatabase.read(to_print, i);
+      std::cout << to_print.pos << ' ' << to_print.left_sibling << 
+      ' ' << to_print.right_sibling << ' ' << to_print.parent << std::endl;
     }
     return;
   }
@@ -286,6 +345,9 @@ public:
 
 int main() {
   BPT<int> test("database");
-  test.Insert(1, 2, 3);
+  for(int i = 0; i < 1; i++) {
+    test.Insert(1, 2, i);
+  }
+  test.Print();
   return 0;
 }
