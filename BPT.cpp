@@ -6,6 +6,7 @@
 #include <string>
 const unsigned long long exp1 = 13331, exp2 = 131;
 const int minus_max = -2147483648;
+const int maxn = 2147483647;
 template <class W, int info_len = 3> class MemoryRiver { // 应当采取3个参数。
   // 一个存储目前的元素个数，一个存储目前的根节点，一个存储当前的块应该写入到哪里。
 private:
@@ -145,7 +146,7 @@ private:
         break;
       }
     }
-    if (res.datas[find].son == 0) {
+    if (res.datas[0].son == 0) {
       if (find != res.now_size) {
         std::memmove(&res.datas[find + 1], &res.datas[find],
                      (res.now_size - find) * sizeof(MyData));
@@ -159,12 +160,15 @@ private:
         }
       } // 说明需要向上更新。
     } else {
+      if (find == (res.now_size)) {
+        find--;
+      }
       NodeInsert(to_insert, res.datas[find].son); // 并非叶子节点。进一步插入。
       mydatabase.read(res, pos); // 可能该层节点被更新，需要重新读入。
     }
     mydatabase.write(res, pos);
     if (res.now_size >= (size - 3)) {
-      // Split
+      Split(res.pos);
     }
     return;
   }
@@ -192,7 +196,8 @@ private:
     int now_size = res.now_size;
     int half = now_size / 2;
     std::memmove(&new_node.datas[0], &res.datas[0], half * sizeof(MyData));
-    std::memmove(&res.datas[0], &res[half], (now_size - half) * sizeof(MyData));
+    std::memmove(&res.datas[0], &res.datas[half],
+                 (now_size - half) * sizeof(MyData));
     res.now_size = (now_size - half);
     new_node.now_size = half;
     new_node.left_sibling = res.left_sibling;
@@ -204,19 +209,23 @@ private:
     mydatabase.write_info(to_insert_pos, 3);
     new_node.pos = to_insert_pos; // 至此，所有新节点已经准备完毕。
     res.left_sibling = new_node.pos;
+    Node res1;
+    mydatabase.read(res1, new_node.left_sibling);
+    res1.right_sibling = to_insert_pos;
+    mydatabase.write(res1, res1.pos);
     MyData index;
     index = new_node.datas[half - 1];
     index.son = to_insert_pos;
-    if (new_node[0].son != 0) {
+    if (new_node.datas[0].son != 0) {
       for (int i = 0; i < half; i++) {
         Node to_update;
-        mydatabase.read(to_update, new_node[i].son);
+        mydatabase.read(to_update, new_node.datas[i].son);
         to_update.parent = to_insert_pos;
-        mydatabase.write(to_update, new_node[i].son);
+        mydatabase.write(to_update, new_node.datas[i].son);
       }
     } // 更新所有新节点子节点的父亲。
     if (res.parent) {
-      OnlyInsert(res.parent, index, res.datas[now_size - half - 1]);
+      OnlyInsert(res.parent, index);
     } else {
       int current;
       mydatabase.get_info(current, 3);
@@ -227,9 +236,9 @@ private:
       new_alloc.right_sibling = 0;
       new_alloc.parent = 0;
       new_alloc.pos = current;
-      new_alloc.datas[0] = res.datas[now_size - half - 1];
-      new_alloc.datas[0].son = res.pos;
-      new_alloc.datas[1] = index;
+      new_alloc.datas[1] = res.datas[now_size - half - 1];
+      new_alloc.datas[1].son = res.pos;
+      new_alloc.datas[0] = index;
       res.parent = current;
       new_node.parent = current;
       mydatabase.write(new_alloc, current);
@@ -240,18 +249,19 @@ private:
     mydatabase.write(new_node, new_node.pos);
     return;
   }
-  void OnlyInsert(int pos, MyData to_insert, MyData old_index) {
+  void OnlyInsert(int pos, MyData to_insert) {
     Node res;
     mydatabase.read(res, pos);
     int find = 0;
     for (find = 0; find < res.now_size; find++) {
-      if (old_index == res.datas[find]) {
+      if (res.datas[find] > to_insert) {
         break;
       }
     }
-    std::memmove(res.datas[find + 1], res.datas[find],
-                 (res.now_size - find + 1));
+    std::memmove(&res.datas[find + 1], &res.datas[find],
+                 (res.now_size - find) * sizeof(MyData));
     res.datas[find] = to_insert;
+    res.now_size++;
     mydatabase.write(res, pos);
     return;
   }
@@ -291,7 +301,7 @@ public:
     int root, total;
     mydatabase.get_info(total, 1);
     mydatabase.get_info(root, 2);
-    if(total == 0) {
+    if (total == 0) {
       return false;
     }
     Node res;
@@ -300,28 +310,30 @@ public:
     to_find.hash2 = hash_2;
     to_find.value = minus_max;
     mydatabase.read(res, root);
-    while(res.datas[0].son != 0) {
-      for(int i = 0; i < res.now_size; i++) {
-        if(to_find < res.datas[i]) {
+    while (res.datas[0].son != 0) {
+      for (int i = 0; i < res.now_size; i++) {
+        if (to_find < res.datas[i]) {
           mydatabase.read(res, res.datas[i].son);
           break;
         }
       }
     }
     int found = 0;
-    for(int found = 0; found < res.now_size; found++) {
-      if((hash_1 == res.datas[found].hash1) && (hash_2 == res.datas[found].hash2)) {
+    for (int found = 0; found < res.now_size; found++) {
+      if ((hash_1 == res.datas[found].hash1) &&
+          (hash_2 == res.datas[found].hash2)) {
         break;
       }
     }
-    if(found == res.now_size) {
+    if (found == res.now_size) {
       return 0;
     }
-    while((hash_1 == res.datas[found].hash1) && (hash_2 == res.datas[found].hash2)) {
+    while ((hash_1 == res.datas[found].hash1) &&
+           (hash_2 == res.datas[found].hash2)) {
       std::cout << res.datas[found].value << std::endl;
       found++;
-      if(found == res.now_size) {
-        if(res.right_sibling == 0) {
+      if (found == res.now_size) {
+        if (res.right_sibling == 0) {
           return 1;
         }
         mydatabase.read(res, res.right_sibling);
@@ -331,23 +343,82 @@ public:
     return 1;
   }
   void Print() {
-    int current;
+
+    int current, total, root;
+    mydatabase.get_info(total, 1);
+    mydatabase.get_info(root, 2);
     mydatabase.get_info(current, 3);
+    std::cout << total << ' ' << root << ' ' << current << std::endl;
     Node to_print;
-    for(int i = 1; i <= 3; i++) {
+    for (int i = 1; i <= current; i++) {
       mydatabase.read(to_print, i);
-      std::cout << to_print.pos << ' ' << to_print.left_sibling << 
-      ' ' << to_print.right_sibling << ' ' << to_print.parent << std::endl;
+      std::cout << to_print.pos << ' ' << to_print.now_size << ' '
+                << to_print.left_sibling << ' ' << to_print.right_sibling << ' '
+                << to_print.parent << std::endl;
     }
     return;
+  }
+  void PrintRoot() {
+    int root;
+    mydatabase.get_info(root, 2);
+    Node res;
+    mydatabase.read(res, root);
+    for (int i = 0; i < res.now_size; i++) {
+      std::cout << res.datas[i].value << ' ' << res.datas[i].son << std::endl;
+    }
+    return;
+  }
+  void Tranverse() {
+    int root;
+    mydatabase.get_info(root, 2);
+    Node res;
+    mydatabase.read(res, root);
+    while (res.datas[0].son != 0) {
+      mydatabase.read(res, res.datas[0].son);
+    }
+    int big = -1;
+    while (res.right_sibling) {
+      std::cout << res.datas[res.now_size - 1].value << ' ' << big << std::endl;
+      big = res.datas[res.now_size - 1].value;
+      mydatabase.read(res, res.right_sibling);
+    }
+    std::cout << res.datas[res.now_size - 1].value << ' ' << big << std::endl;
+    return;
+  }
+  void Output() {
+    for (int i = 1; i <= 30; i++) {
+      Node res;
+      mydatabase.read(res, i);
+      std::cout << i << ' ' << res.datas[0].value << std::endl;
+    }
+    return;
+  }
+  void Check(int pos) {
+    Node x;
+    mydatabase.read(x, pos);
+    std::cout << x.pos << ' ' << x.parent << ' ' << x.left_sibling << ' '
+              << x.right_sibling << ' ' << x.now_size << std::endl;
+    for (int i = 0; i < x.now_size; i++) {
+      std::cout << x.datas[i].value << std::endl;
+    }
+  }
+  bool Erase(unsigned long long hash1, unsigned long long hash2, int value) {
+    MyData to_delete;
+    to_delete.hash1 = hash1;
+    to_delete.hash2 = hash2;
+    to_delete.value = value;
+    int root;
+    mydatabase.get_info(root, 2);
+    Node root_info;
+    mydatabase.read(root_info, root);
   }
 };
 
 int main() {
   BPT<int> test("database");
-  for(int i = 0; i < 1; i++) {
+  for(int i = 1000; i >= 0 ; i--) {
     test.Insert(1, 2, i);
   }
-  test.Print();
+  test.find(1, 2);
   return 0;
 }
