@@ -97,6 +97,36 @@ private:
     unsigned long long hash2 = 0;
     int value = 0;
     int son = 0;
+    bool operator>(const MyData& other) {
+      if(hash1 != other.hash1) {
+        return hash1 > other.hash1;
+      }
+      if(hash2 != other.hash2) {
+        return hash2 > other.hash2;
+      }
+      return value > other.value;
+    }
+    bool operator<(const MyData& other) {
+      if(hash1 != other.hash1) {
+        return hash1 < other.hash1;
+      }
+      if(hash2 != other.hash2) {
+        return hash2 < other.hash2;
+      }
+      return value < other.value;
+    }
+        bool operator==(const MyData& other) {
+      if(hash1 != other.hash1) {
+        return false;
+      }
+      if(hash2 != other.hash2) {
+        return false;
+      }
+      return value == other.value;
+    }
+    bool operator!=(const MyData& other) {
+      return !(*this == other);
+    }
   };
   struct Node {
     MyData datas[size];
@@ -107,13 +137,26 @@ private:
     int pos = 0;
   };
   MemoryRiver<Node, 3> mydatabase;
+  MyData NodeInsert(MyData to_insert, int pos, int &flag) {
+    Node res;
+    mydatabase.read(res, pos);
+    int find = 0;
+    for(find = 0; find < res.now_size; find++) {
+      if(res.datas[find] > to_insert) {
+        break;
+      }
+    }
+    if(find == (res.now_size - 1)) {
+      find--;
+    }//说明已经到头了。
+  }
 public:
   BPT() = default;
   BPT(std::string name) {
     mydatabase.ChangeName(name);
   }
   ~BPT() = default;
-  MyData Insert(unsigned long long hash1, unsigned long long hash2, int value, int &flag) {
+  void Insert(unsigned long long hash1, unsigned long long hash2, int value) {
     int total = 0;
     mydatabase.get_info(total, 1);
     if(total == 0) {
@@ -127,8 +170,17 @@ public:
       mydatabase.write_info(1, 1);
       mydatabase.write_info(1, 2);
       mydatabase.write_info(1, 3);
-      return res1.datas[0];
+    } else {
+      int root;
+      mydatabase.get_info(root, 2);
+      MyData res;
+      res.hash1 = hash1;
+      res.hash2 = hash2;
+      res.value = value;
+      bool flag = 0;
+      NodeInsert(res, root, flag);
     }
+    return;
   }
 };
 
