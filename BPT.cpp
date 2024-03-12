@@ -61,17 +61,21 @@ public:
 
   // 在文件合适位置写入类对象t，并返回写入的位置索引index
   // 位置索引意味着当输入正确的位置索引index，在以下三个函数中都能顺利的找到目标对象进行操作
-  // 位置索引index可以取为对象写入的起始位置
-  void write(W &t, long long place, int size = 1) {
+  // 位置索引index可以取为对象写入的起始位置,1base
+  void write(W &t, int which_node, int size = 1) {
+    int place = info_len * 4;
+    place += (which_node - 1) * sizeofT;
     file.open(file_name);
     file.seekp(place);
     file.write(reinterpret_cast<char *>(&t), sizeofT * size);
     file.close();
     return;
   }
-  void read(W &t, const long long index, int size = 1) {
+  void read(W &t, int which_node, int size = 1) {
+    int place = info_len * 4;
+    place += (which_node - 1) * sizeofT;
     file.open(file_name);
-    file.seekg(index);
+    file.seekg(place);
     file.read(reinterpret_cast<char *>(&t), sizeofT * size);
     file.close();
     return;
@@ -89,8 +93,8 @@ template <class Value = int, int size = 70> class BPT {
 private:
   std::string file = "database.txt";
   struct MyData {
-    unsigned long long hash_1 = 0;
-    unsigned long long hash_2 = 0;
+    unsigned long long hash1 = 0;
+    unsigned long long hash2 = 0;
     int value = 0;
     int son = 0;
   };
@@ -109,8 +113,22 @@ public:
     mydatabase.ChangeName(name);
   }
   ~BPT() = default;
-  MyData Insert() {
-    
+  MyData Insert(unsigned long long hash1, unsigned long long hash2, int value, int &flag) {
+    int total = 0;
+    mydatabase.get_info(total, 1);
+    if(total == 0) {
+      Node res1;
+      res1.datas[0].hash1 = hash1;
+      res1.datas[0].hash2 = hash2;
+      res1.datas[0].value = value;
+      res1.now_size = 1;
+      res1.pos = 1;
+      mydatabase.write(res1, 1);
+      mydatabase.write_info(1, 1);
+      mydatabase.write_info(1, 2);
+      mydatabase.write_info(1, 3);
+      return res1.datas[0];
+    }
   }
 };
 
