@@ -92,9 +92,8 @@ unsigned long long MyHash(std::string txt, unsigned long long exp) {
   }
   return ans;
 }
-template <class Value = int, int size = 1000> class BPT {
+template <class Value = int, int size = 3> class BPT {
 private:
-  std::string file = "database";
   struct MyData {
     unsigned long long hash1 = 0;
     unsigned long long hash2 = 0;
@@ -131,14 +130,13 @@ private:
   };
   struct Node {
     MyData datas[size];
-    int parent = 0;
     int left_sibling = 0;
     int right_sibling = 0;
     int now_size = 0;
     int pos = 0;
   };
   MemoryRiver<Node, 3> mydatabase;
-  void NodeInsert(MyData to_insert, int pos) {
+  void NodeInsert(MyData to_insert, int pos, int last_node) {
     Node res;
     mydatabase.read(res, pos);
     int find = 0;
@@ -158,36 +156,20 @@ private:
     } else {
       if (find == (res.now_size)) {
         find--;
-        auto  x = to_insert;
+        auto x = to_insert;
         x.son = res.datas[find].son;
         res.datas[find] = x;
         mydatabase.write(res, pos);
       }
-      NodeInsert(to_insert, res.datas[find].son); // 并非叶子节点。进一步插入。
+      NodeInsert(to_insert, res.datas[find].son,
+                 res.pos); // 并非叶子节点。进一步插入。
     }
     if (res.now_size >= (size - 3)) {
-      Split(res.pos);
+      Split(res.pos, last_node);
     }
     return;
   }
-  void UpdateIndex(int pos, MyData old_data, MyData new_data) {
-    if (pos == 0) {
-      return;
-    }
-    Node res;
-    mydatabase.read(res, pos);
-    for (int i = 0; i < res.now_size; i++) {
-      if (res.datas[i] == old_data) {
-        new_data.son = res.datas[i].son;
-        res.datas[i] = new_data;
-        mydatabase.write(res, pos);
-        UpdateIndex(res.parent, old_data, new_data);
-        return;
-      }
-    }
-    return;
-  }
-  void Split(int pos) {
+  void Split(int pos, int last_node) {
     Node res;
     Node new_node;
     mydatabase.read(res, pos);
@@ -200,7 +182,6 @@ private:
     new_node.now_size = half;
     new_node.left_sibling = res.left_sibling;
     new_node.right_sibling = res.pos;
-    new_node.parent = res.parent;
     int to_insert_pos;
     mydatabase.get_info(to_insert_pos, 3);
     to_insert_pos++;
@@ -214,16 +195,8 @@ private:
     MyData index;
     index = new_node.datas[half - 1];
     index.son = to_insert_pos;
-    if (new_node.datas[0].son != 0) {
-      for (int i = 0; i < half; i++) {
-        Node to_update;
-        mydatabase.read(to_update, new_node.datas[i].son);
-        to_update.parent = to_insert_pos;
-        mydatabase.write(to_update, new_node.datas[i].son);
-      }
-    } // 更新所有新节点子节点的父亲。
-    if (res.parent) {
-      OnlyInsert(res.parent, index);
+    if (last_node) {
+      OnlyInsert(last_node, index);
     } else {
       int current;
       mydatabase.get_info(current, 3);
@@ -232,13 +205,10 @@ private:
       new_alloc.now_size = 2;
       new_alloc.left_sibling = 0;
       new_alloc.right_sibling = 0;
-      new_alloc.parent = 0;
       new_alloc.pos = current;
       new_alloc.datas[1] = res.datas[now_size - half - 1];
       new_alloc.datas[1].son = res.pos;
       new_alloc.datas[0] = index;
-      res.parent = current;
-      new_node.parent = current;
       mydatabase.write(new_alloc, current);
       mydatabase.write_info(current, 2);
       mydatabase.write_info(current, 3);
@@ -289,7 +259,7 @@ public:
       res.hash1 = hash1;
       res.hash2 = hash2;
       res.value = value;
-      NodeInsert(res, root);
+      NodeInsert(res, root, 0);
       total++;
       mydatabase.write_info(total, 1);
     }
@@ -325,7 +295,7 @@ public:
       }
     }
     if (found == res.now_size) {
-            std::cout << "null" << '\n';
+      std::cout << "null" << '\n';
       return 0;
     }
     while ((hash_1 == res.datas[found].hash1) &&
@@ -360,8 +330,16 @@ public:
     }
     return;
   }
-  void Borrow(Node target) {
-    
+  void BorrowOrMerge(Node target) {
+    if (target.right_sibling == 0) {
+      if (target.left_sibling == 0) {
+        return;
+      }
+      Node res;
+      mydatabase.read(res, target.left_sibling);
+      if (target) {
+      };
+    }
   }
   void PrintRoot() {
     int root;
@@ -407,124 +385,112 @@ public:
       std::cout << x.datas[i].value << '\n';
     }
   }
-  bool Erase(unsigned long long hash1, unsigned long long hash2, int value) {
+  void Erase(unsigned long long hash_1, unsigned long long hash_2, int value) {
+    int root;
+    mydatabase.get_info(root, 2); // to get the node.
+    int status = 0;
     MyData to_delete;
-    to_delete.hash1 = hash1;
-    to_delete.hash2 = hash2;
+    to_delete.hash1 = hash_1;
+    to_delete.hash2 = hash_2;
     to_delete.value = value;
-    int root, total;
-    mydatabase.get_info(total, 1);
-    mydatabase.get_info(root, 2);
-    if (total == 0) {
-      return false;
+    NodeErase(root, 0, to_delete, status);
+    if(status != -1) {
+      int total;
+      mydatabase.get_info(total, 1);
+      total--;
+      mydatabase.write_info(total, 1);//change the size.
     }
-    Node search;
-    mydatabase.read(search, root);
-    while (search.datas[0].son != 0) {
-      for (int i = 0; i < search.now_size; i++) {
-        if ((search.datas[i] > to_delete) || (search.datas[i] == to_delete)) {
-          mydatabase.read(search, search.datas[i].son);
-          break;
-        }
-        if (i == (search.now_size - 1)) {
-          return false;
-        } // 已经检索到最后，说明不存在。
-      }
-    }
-    for (int i = 0; i < search.now_size; i++) {
-      if (to_delete == search.datas[i]) {
-        if (i == (search.now_size - 1)) {
-          UpdateIndex(search.parent, search.datas[search.now_size - 1],
-                      search.datas[search.now_size - 2]);
-        } else {
-          std::memmove(&search.datas[i], &search.datas[i + 1],
-                  (search.now_size - i - 1) * sizeof(MyData));
-        }
-        search.now_size--;
-        if(search.now_size == 0) {
-          DeleteParentNode(search.parent, search.pos);
-          if(search.left_sibling != 0) {
-            Node left_s;
-            mydatabase.read(left_s, search.left_sibling);
-            left_s.right_sibling = search.right_sibling;
-            mydatabase.write(left_s, search.left_sibling);
-          }
-          if(search.right_sibling != 0) {
-            Node right_s;
-            mydatabase.read(right_s, search.right_sibling);
-            right_s.left_sibling = search.left_sibling;
-            mydatabase.write(right_s, search.right_sibling);
-          }
-        }
-        mydatabase.write(search, search.pos);
-        total--;
-        mydatabase.write_info(total, 1);
-        return true;
-      }
-    }
-    return false;
+    return;
   }
-  void DeleteParentNode(int pos, int to_delete) {
-    if(pos == 0) {
-      return;
-    }
-    Node to_check;
-    mydatabase.read(to_check, pos);
-    for(int i = 0; i < to_check.now_size; i++) {
-      if(to_check.datas[i].son == to_delete) {
-        if(i != (to_check.now_size - 1)) {
-          std::memmove(&to_check.datas[i], &to_check.datas[i + 1], 
-          sizeof(MyData) * (to_check.now_size - i - 1));
+  MyData NodeErase(int pos, int last_pos, MyData to_delete, int &status) {
+    Node res;
+    MyData nothing;
+    mydatabase.read(res, pos);
+    int found = 0;
+    for (int i = 0; i < res.now_size; i++) {
+      if ((res.datas[i] > to_delete) || (res.datas[i] == to_delete)) {
+        if (res.datas[i].son == 0) {
+          if (res.datas[i] != to_delete) {
+            status = -1;
+            return nothing; // didn't find~
+          } else {
+            if (i != (res.now_size - 1)) {
+              std::memmove(&res.datas[i], &res.datas[i + 1],
+                           (res.now_size - i - 1));
+              res.now_size--;
+              mydatabase.write(res, pos);
+              status = 0;
+              return nothing;
+            } else {
+              res.now_size--;
+              mydatabase.write(res, pos);
+              status = 1;
+              return res.datas[res.now_size - 1];
+            }
+          }
+        } else { // means that it isn't the leaf node.
+          MyData may_change;
+          may_change = NodeErase(res.datas[i].son, res.pos, to_delete, status);
+          if ((status == 0) || (status == -1)) {
+            return nothing; // I need to do nothing.
+          } else {
+            may_change.son = res.datas[i].son;
+            res.datas[i] = may_change;
+            mydatabase.write(res, pos);
+            if(i == res.now_size - 1) {
+              status = 1;
+              return may_change;
+            } else {
+              status = 0;
+              return nothing;
+            }
+          }
         }
-        to_check.now_size--;
-        mydatabase.write(to_check, pos);
-        if(to_check.now_size == 0) {
-          DeleteParentNode(to_check.parent, to_check.pos);
-        }
-        return;
       }
     }
+    status = -1;
+    return nothing; // didn't find the element to delete.
   }
 };
 
 int main() {
-  std::ios::sync_with_stdio(false);
-  BPT<int> test("database");
-  int n;
-  std::cin >> n;
-  std::string op;
-  for(int i = 0; i < n; i++) {
-    std::cin >> op;
-    if(op == "insert") {
-      std::string index;
-      int value;
-      std::cin >> index;
-      std::cin >> value;
-      unsigned long long hash1, hash2;
-      hash1 = MyHash(index, exp1);
-      hash2 = MyHash(index, exp2);
-      test.Insert(hash1, hash2, value);
-      continue;
+    std::ios::sync_with_stdio(false);
+    BPT<int> test("database");
+    int n;
+    std::cin >> n;
+    std::string op;
+    for (int i = 0; i < n; i++) {
+      std::cin >> op;
+      if (op == "insert") {
+        std::string index;
+        int value;
+        std::cin >> index;
+        std::cin >> value;
+        unsigned long long hash1, hash2;
+        hash1 = MyHash(index, exp1);
+        hash2 = MyHash(index, exp2);
+        test.Insert(hash1, hash2, value);
+        continue;
+      }
+      if (op == "find") {
+        std::string index;
+        std::cin >> index;
+        unsigned long long hash1, hash2;
+        hash1 = MyHash(index, exp1);
+        hash2 = MyHash(index, exp2);
+        test.find(hash1, hash2);
+        continue;
+      }
+      if (op == "delete") {
+        std::string index;
+        int value;
+        std::cin >> index;
+        std::cin >> value;
+        unsigned long long hash1, hash2;
+        hash1 = MyHash(index, exp1);
+        hash2 = MyHash(index, exp2);
+        test.Erase(hash1, hash2, value);
+      }
     }
-    if(op == "find") {
-      std::string index;
-      std::cin >> index;
-      unsigned long long hash1, hash2;
-      hash1 = MyHash(index, exp1);
-      hash2 = MyHash(index, exp2);
-      test.find(hash1, hash2);
-      continue;
-    }
-    if(op == "delete") {
-      std::string index;
-      int value;
-      std::cin >> index;
-      std::cin >> value;
-      unsigned long long hash1, hash2;
-      hash1 = MyHash(index, exp1);
-      hash2 = MyHash(index, exp2);
-      test.Erase(hash1, hash2, value);
-    }
+    return 0;
   }
-  return 0;
-}
