@@ -92,7 +92,7 @@ unsigned long long MyHash(std::string txt, unsigned long long exp) {
   }
   return ans;
 }
-template <class Value = int, int size = 3> class BPT {
+template <class Value = int, int size = 100> class BPT {
 private:
   struct MyData {
     unsigned long long hash1 = 0;
@@ -330,17 +330,6 @@ public:
     }
     return;
   }
-  void BorrowOrMerge(Node target) {
-    if (target.right_sibling == 0) {
-      if (target.left_sibling == 0) {
-        return;
-      }
-      Node res;
-      mydatabase.read(res, target.left_sibling);
-      if (target) {
-      };
-    }
-  }
   void PrintRoot() {
     int root;
     mydatabase.get_info(root, 2);
@@ -393,16 +382,17 @@ public:
     to_delete.hash1 = hash_1;
     to_delete.hash2 = hash_2;
     to_delete.value = value;
-    NodeErase(root, 0, to_delete, status);
-    if(status != -1) {
+    NodeErase(root, 0, to_delete);
+    if (status != -1) {
       int total;
       mydatabase.get_info(total, 1);
       total--;
-      mydatabase.write_info(total, 1);//change the size.
+      mydatabase.write_info(total, 1); // change the size.
     }
     return;
   }
-  MyData NodeErase(int pos, int last_pos, MyData to_delete, int &status) {
+  bool NodeErase(int pos, int last_pos, MyData to_delete, int where, int how_many) {
+// pos表示当前节点号、父亲节点号、待删除内容，这个节点是父亲节点的多少号元素、父亲节点有多少个元素。
     Node res;
     MyData nothing;
     mydatabase.read(res, pos);
@@ -411,49 +401,91 @@ public:
       if ((res.datas[i] > to_delete) || (res.datas[i] == to_delete)) {
         if (res.datas[i].son == 0) {
           if (res.datas[i] != to_delete) {
-            status = -1;
-            return nothing; // didn't find~
+            return false; // didn't find~
           } else {
             if (i != (res.now_size - 1)) {
               std::memmove(&res.datas[i], &res.datas[i + 1],
                            (res.now_size - i - 1));
               res.now_size--;
-              mydatabase.write(res, pos);
-              status = 0;
-              return nothing;
+              if(last_pos == 0) {
+                mydatabase.write(res, pos);
+                return true;
+              }
+              if(res.now_size < (size / 2)) {
+                if((where == 0) && (how_many == 1)) {//说明这个节点没有办法进行调整。
+                //注意这里要检查删块操作。这一部分我还没有完成。
+                  return true;
+                }
+                if(where == 0) {
+                  int right;
+                  right = res.right_sibling;
+                  Node right_s;
+                  mydatabase.read(right_s, res.right_sibling);//读入右儿子。
+                  if(right_s.now_size >= (size / 2)) {
+                    auto to_update = res.datas[res.now_size];
+                    res.datas[res.now_size] = right_s.datas[0];
+                    res.now_size++;
+                    mydatabase.write(res, pos);
+                    std::memmove(&right_s.datas[0], &right_s.datas[1], (right_s.now_size - 1) * sizeof(MyData));
+                    right_s.now_size--;
+                    mydatabase.write(right_s, right_s.pos);
+                    Node parent;
+                    mydatabase.read(parent, last_pos);
+                    for(int i = 0; i < parent.now_size; i++) {
+                      if(parent.datas[i] == to_update) {
+                        auto to_change = res.datas[res.now_size - 1];
+                        to_change.son = parent.datas[i].son;
+                        parent.datas[i] = to_change;
+                        mydatabase.write(parent, last_pos);
+                        return true;//借块操作完成。右兄弟节点、本身、父节点均得到更新。
+                      }
+                    }
+                  } else {//说明旁边的节点数目数目已经足够少。
+                    std::memmove(&res.datas[res.now_size], &right_s.datas[0], right_s.now_size * sizeof(MyData));
+                    auto to_delete = res.datas[res.now_size];
+                    res.now_size += right_s.now_size;
+                    Node parent;
+                    mydatabase.read(parent, last_pos);
+                    for(int i = 0; i < parent.now_size; i++) {
+                      if(parent.datas[i] == to_delete) {
+                        if(i != (parent.now_size - 1)) {
+                          std::memmove(&parent.datas[i], &parent.datas[i + 1], (parent.now_size - i - 1) * sizeof(MyData));
+                        }
+                        parent.now_size--;
+                        break;
+                      }
+                    }
+                    auto to_update = res.datas[res.now_size - 1];
+                    for(int i = 0; i < parent.now_size; i++) {
+                      if(parent.datas[i] == to_update) {
+                        parent.datas[i].son = pos;
+                        break;
+                      }
+                    }
+                    mydatabase.write(parent, last_pos);
+                    res.right_sibling = right_s.right_sibling;
+                    if(right_s.right_sibling != 0) {
+                      Node double_right;
+                      mydatabase.read(double_right, right_s.right_sibling);
+                      double_right.left_sibling = pos;
+                      mydatabase.write(double_right, right_s.right_sibling);
+                    }
+                    mydatabase.write(res, pos);
+                    return true;
+                  }
+                }
+              }
             } else {
               res.now_size--;
-              mydatabase.write(res, pos);
-              status = 1;
-              return res.datas[res.now_size - 1];
-            }
-          }
-        } else { // means that it isn't the leaf node.
-          MyData may_change;
-          may_change = NodeErase(res.datas[i].son, res.pos, to_delete, status);
-          if ((status == 0) || (status == -1)) {
-            return nothing; // I need to do nothing.
-          } else {
-            may_change.son = res.datas[i].son;
-            res.datas[i] = may_change;
-            mydatabase.write(res, pos);
-            if(i == res.now_size - 1) {
-              status = 1;
-              return may_change;
-            } else {
-              status = 0;
-              return nothing;
             }
           }
         }
+        return 0;
       }
     }
-    status = -1;
-    return nothing; // didn't find the element to delete.
-  }
+  };
 };
-
-int main() {
+  int main() {
     std::ios::sync_with_stdio(false);
     BPT<int> test("database");
     int n;
