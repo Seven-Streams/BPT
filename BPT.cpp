@@ -92,7 +92,7 @@ unsigned long long MyHash(std::string txt, unsigned long long exp) {
   }
   return ans;
 }
-template <class Value = int, int size = 5> class BPT {
+template <class Value = int, int size = 1000> class BPT {
 private:
   struct MyData {
     unsigned long long hash1 = 0;
@@ -376,13 +376,13 @@ public:
   void Erase(unsigned long long hash_1, unsigned long long hash_2, int value) {
     int root;
     mydatabase.get_info(root, 2); // to get the node.
-    int status = 0;
+    bool status = 0;
     MyData to_delete;
     to_delete.hash1 = hash_1;
     to_delete.hash2 = hash_2;
     to_delete.value = value;
-    NodeErase(root, 0, to_delete, 0, 0);
-    if (status != -1) {
+    status = NodeErase(root, 0, to_delete, 0, 0);
+    if (status != false) {
       int total;
       mydatabase.get_info(total, 1);
       total--;
@@ -852,54 +852,46 @@ public:
 int main() {
   std::ios::sync_with_stdio(false);
   BPT<int> test("database");
-  for (int i = 15; i >= 0; i--) {
-    test.Insert(1, 2, i);
+  int n;
+  std::cin >> n;
+  std::string op;
+  for (int i = 0; i < n; i++) {
+    std::cin >> op;
+    if (op == "insert") {
+      std::string index;
+      int value;
+      std::cin >> index;
+      std::cin >> value;
+      unsigned long long hash1, hash2;
+      hash1 = MyHash(index, exp1);
+      hash2 = MyHash(index, exp2);
+      test.Insert(hash1, hash2, value);
+      continue;
+    }
+    if (op == "find") {
+      std::string index;
+      std::cin >> index;
+      unsigned long long hash1, hash2;
+      hash1 = MyHash(index, exp1);
+      hash2 = MyHash(index, exp2);
+      test.find(hash1, hash2);
+      continue;
+    }
+    if (op == "delete") {
+      std::string index;
+      int value;
+      std::cin >> index;
+      std::cin >> value;
+      unsigned long long hash1, hash2;
+      hash1 = MyHash(index, exp1);
+      hash2 = MyHash(index, exp2);
+      test.Erase(hash1, hash2, value);
+      continue;
+    }
   }
-  for(int i = 15; i >= 0; i--) {
-    test.Erase(1, 2, i);
-    test.find(1, 2);
-    std::cout << "----------" << std::endl;
-  }
-  // int n;
-  // std::cin >> n;
-  // std::string op;
-  // for (int i = 0; i < n; i++) {
-  //   std::cin >> op;
-  //   if (op == "insert") {
-  //     std::string index;
-  //     int value;
-  //     std::cin >> index;
-  //     std::cin >> value;
-  //     unsigned long long hash1, hash2;
-  //     hash1 = MyHash(index, exp1);
-  //     hash2 = MyHash(index, exp2);
-  //     test.Insert(hash1, hash2, value);
-  //     continue;
-  //   }
-  //   if (op == "find") {
-  //     std::string index;
-  //     std::cin >> index;
-  //     unsigned long long hash1, hash2;
-  //     hash1 = MyHash(index, exp1);
-  //     hash2 = MyHash(index, exp2);
-  //     test.find(hash1, hash2);
-  //     continue;
-  //   }
-  //   if (op == "delete") {
-  //     std::string index;
-  //     int value;
-  //     std::cin >> index;
-  //     std::cin >> value;
-  //     unsigned long long hash1, hash2;
-  //     hash1 = MyHash(index, exp1);
-  //     hash2 = MyHash(index, exp2);
-  //     test.Erase(hash1, hash2, value);
-  //     continue;
-  //   }
-  // }
   // // for (int i = 1; i <= 10; i++) {
   // //   test.Check(i);
   // //   std::cout << std::endl;
   // // }
-  // return 0;
+  return 0;
 }
