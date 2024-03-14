@@ -92,7 +92,7 @@ unsigned long long MyHash(std::string txt, unsigned long long exp) {
   }
   return ans;
 }
-template <class Value = int, int size = 5> class BPT {
+template <class Value = int, int size = 10> class BPT {
 private:
   struct MyData {
     unsigned long long hash1 = 0;
@@ -129,7 +129,7 @@ private:
     bool operator!=(const MyData &other) { return !(*this == other); }
   };
   struct Node {
-    MyData datas[size];
+    MyData datas[size + 3];
     int left_sibling = 0;
     int right_sibling = 0;
     int now_size = 0;
@@ -161,10 +161,9 @@ private:
         res.datas[find] = x;
         mydatabase.write(res, pos);
       }
-      NodeInsert(to_insert, res.datas[find].son,
-                 res.pos); // 并非叶子节点。进一步插入。
+      NodeInsert(to_insert, res.datas[find].son, res.pos);
     }
-    if (res.now_size >= (size - 3)) {
+    if (res.now_size >= size) {
       Split(res.pos, last_node);
     }
     return;
@@ -368,10 +367,10 @@ public:
   void Check(int pos) {
     Node x;
     mydatabase.read(x, pos);
-    std::cout << x.pos << ' ' << x.parent << ' ' << x.left_sibling << ' '
-              << x.right_sibling << ' ' << x.now_size << '\n';
+    std::cout << x.pos << ' ' << x.left_sibling << ' ' << x.right_sibling << ' '
+              << x.now_size << '\n';
     for (int i = 0; i < x.now_size; i++) {
-      std::cout << x.datas[i].value << '\n';
+      std::cout << x.datas[i].value << ' ' << x.datas[i].son << '\n';
     }
   }
   void Erase(unsigned long long hash_1, unsigned long long hash_2, int value) {
@@ -415,7 +414,7 @@ public:
               if (res.right_sibling != 0) {
                 Node right;
                 mydatabase.read(right, res.right_sibling);
-                right.right_sibling = res.right_sibling;
+                right.left_sibling = res.left_sibling;
                 mydatabase.write(right, res.right_sibling);
               }
               auto x = res.datas[0];
@@ -433,6 +432,8 @@ public:
                   }
                 }
               }
+              res.now_size--;
+              mydatabase.write(res, pos);
               return true;
             }
             if (i != (res.now_size - 1)) {
@@ -490,9 +491,9 @@ public:
                     }
                   }
                 } else { // 说明旁边的节点数目数目已经足够少。
+                  auto to_change = res.datas[res.now_size];
                   std::memmove(&res.datas[res.now_size], &right_s.datas[0],
                                right_s.now_size * sizeof(MyData));
-                  auto to_change = res.datas[res.now_size];
                   res.now_size += right_s.now_size;
                   Node parent;
                   mydatabase.read(parent, last_pos);
@@ -593,38 +594,39 @@ public:
           if (last_pos == 0) {
             return true;
           }
+          mydatabase.read(res, pos);
           if (res.now_size == 0) { // 说明删空了。
-              if (res.left_sibling != 0) {
-                Node left;
-                mydatabase.read(left, res.left_sibling);
-                left.right_sibling = res.right_sibling;
-                mydatabase.write(left, res.left_sibling);
-              }
-              if (res.right_sibling != 0) {
-                Node right;
-                mydatabase.read(right, res.right_sibling);
-                right.right_sibling = res.right_sibling;
-                mydatabase.write(right, res.right_sibling);
-              }
-              auto x = res.datas[0];
-              if (last_pos) {
-                Node parent;
-                mydatabase.read(parent, last_pos);
-                for (int i = 0; i < parent.now_size; i++) {
-                  if (parent.datas[i] == x) {
-                    if (i != (parent.now_size - 1)) {
-                      std::memmove(&parent.datas[i], &parent.datas[i + 1],
-                                   (parent.now_size - i - 1) * sizeof(MyData));
-                    }
-                    parent.now_size--;
-                    mydatabase.write(parent, last_pos);
+            if (res.left_sibling != 0) {
+              Node left;
+              mydatabase.read(left, res.left_sibling);
+              left.right_sibling = res.right_sibling;
+              mydatabase.write(left, res.left_sibling);
+            }
+            if (res.right_sibling != 0) {
+              Node right;
+              mydatabase.read(right, res.right_sibling);
+              right.left_sibling = res.left_sibling;
+              mydatabase.write(right, res.right_sibling);
+            }
+            auto x = res.datas[0];
+            if (last_pos) {
+              Node parent;
+              mydatabase.read(parent, last_pos);
+              for (int i = 0; i < parent.now_size; i++) {
+                if (parent.datas[i] == x) {
+                  if (i != (parent.now_size - 1)) {
+                    std::memmove(&parent.datas[i], &parent.datas[i + 1],
+                                 (parent.now_size - i - 1) * sizeof(MyData));
                   }
+                  parent.now_size--;
+                  mydatabase.write(parent, last_pos);
+                  break;
                 }
               }
-              return true;
             }
-          Node res;
-          mydatabase.read(res, pos);
+            mydatabase.write(res, pos);
+            return true;
+          }
           if (res.datas[res.now_size - 1] != last_one) { // 应当向上修改。
             Node parent;
             mydatabase.read(parent, last_pos);
@@ -682,9 +684,9 @@ public:
                       }
                     }
                   } else { // 说明旁边的节点数目数目已经足够少。
+                    auto to_change = res.datas[res.now_size];
                     std::memmove(&res.datas[res.now_size], &right_s.datas[0],
                                  right_s.now_size * sizeof(MyData));
-                    auto to_change = res.datas[res.now_size];
                     res.now_size += right_s.now_size;
                     Node parent;
                     mydatabase.read(parent, last_pos);
@@ -787,43 +789,54 @@ public:
 int main() {
   std::ios::sync_with_stdio(false);
   BPT<int> test("database");
-  int n;
-  std::cin >> n;
-  std::string op;
-  for (int i = 0; i < n; i++) {
-    std::cin >> op;
-    if (op == "insert") {
-      std::string index;
-      int value;
-      std::cin >> index;
-      std::cin >> value;
-      unsigned long long hash1, hash2;
-      hash1 = MyHash(index, exp1);
-      hash2 = MyHash(index, exp2);
-      test.Insert(hash1, hash2, value);
-      continue;
-    }
-    if (op == "find") {
-      std::string index;
-      std::cin >> index;
-      unsigned long long hash1, hash2;
-      hash1 = MyHash(index, exp1);
-      hash2 = MyHash(index, exp2);
-      test.find(hash1, hash2);
-      continue;
-    }
-    if (op == "delete") {
-      std::string index;
-      int value;
-      std::cin >> index;
-      std::cin >> value;
-      unsigned long long hash1, hash2;
-      hash1 = MyHash(index, exp1);
-      hash2 = MyHash(index, exp2);
-      test.Erase(hash1, hash2, value);
-      continue;
-    }
+  for (int i = 0; i < 10; i++) {
+    test.Insert(1, 2, i);
   }
-      test.Print();
-  return 0;
+  // test.Erase(1, 2, 6);
+  for (int i = 1; i <= 4; i++) {
+    test.Check(i);
+    std::cout << std::endl;
+  }
+  // int n;
+  // std::cin >> n;
+  // std::string op;
+  // for (int i = 0; i < n; i++) {
+  //   std::cin >> op;
+  //   if (op == "insert") {
+  //     std::string index;
+  //     int value;
+  //     std::cin >> index;
+  //     std::cin >> value;
+  //     unsigned long long hash1, hash2;
+  //     hash1 = MyHash(index, exp1);
+  //     hash2 = MyHash(index, exp2);
+  //     test.Insert(hash1, hash2, value);
+  //     continue;
+  //   }
+  //   if (op == "find") {
+  //     std::string index;
+  //     std::cin >> index;
+  //     unsigned long long hash1, hash2;
+  //     hash1 = MyHash(index, exp1);
+  //     hash2 = MyHash(index, exp2);
+  //     test.find(hash1, hash2);
+  //     continue;
+  //   }
+  //   if (op == "delete") {
+  //     std::string index;
+  //     int value;
+  //     std::cin >> index;
+  //     std::cin >> value;
+  //     unsigned long long hash1, hash2;
+  //     hash1 = MyHash(index, exp1);
+  //     hash2 = MyHash(index, exp2);
+  //     test.Erase(hash1, hash2, value);
+  //     continue;
+  //   }
+  // }
+  // // for (int i = 1; i <= 10; i++) {
+  // //   test.Check(i);
+  // //   std::cout << std::endl;
+  // // }
+  // return 0;
 }
