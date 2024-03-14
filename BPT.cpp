@@ -92,7 +92,7 @@ unsigned long long MyHash(std::string txt, unsigned long long exp) {
   }
   return ans;
 }
-template <class Value = int, int size = 1000> class BPT {
+template <class Value = int, int size = 500> class BPT {
 private:
   struct MyData {
     unsigned long long hash1 = 0;
@@ -284,7 +284,7 @@ public:
           mydatabase.read(res, res.datas[i].son);
           break;
         }
-                if(i == (res.now_size - 1)) {
+        if (i == (res.now_size - 1)) {
           std::cout << "null" << std::endl;
           return false;
         }
@@ -449,7 +449,7 @@ public:
               mydatabase.write(res, pos);
               return true;
             }
-            if (res.now_size < (size / 2)) {
+            if (res.now_size < (size / 2 - 1)) {
               if ((where == 0) &&
                   (how_many == 1)) { // 说明这个节点没有办法进行调整。
                 if (i == res.now_size) {
@@ -677,7 +677,7 @@ public:
               }
             }
           }
-          if (res.now_size < (size / 2)) {
+          if (res.now_size < (size / 2 - 1)) {
             if ((where == 0) &&
                 (how_many == 1)) { // 说明这个节点没有办法进行调整。
               if (i == res.now_size) {
