@@ -284,6 +284,10 @@ public:
           mydatabase.read(res, res.datas[i].son);
           break;
         }
+                if(i == (res.now_size - 1)) {
+          std::cout << "null" << std::endl;
+          return false;
+        }
       }
     }
     int found = 0;
