@@ -92,7 +92,7 @@ unsigned long long MyHash(std::string txt, unsigned long long exp) {
   }
   return ans;
 }
-template <class Value = int, int size = 10> class BPT {
+template <class Value = int, int size = 5> class BPT {
 private:
   struct MyData {
     unsigned long long hash1 = 0;
@@ -438,7 +438,7 @@ public:
             }
             if (i != (res.now_size - 1)) {
               std::memmove(&res.datas[i], &res.datas[i + 1],
-                           (res.now_size - i - 1));
+                           (res.now_size - i - 1) * sizeof(MyData));
             }
             res.now_size--;
             if (last_pos == 0) {
@@ -463,6 +463,7 @@ public:
                     }
                   }
                 }
+                mydatabase.write(res, pos);
                 return true;
               }
               if (where != (how_many - 1)) {
@@ -527,14 +528,27 @@ public:
                   return true;
                 }
               } else {
+                if (i == res.now_size) {
+                  auto to_erase = res.datas[res.now_size];
+                  auto to_update = res.datas[res.now_size - 1];
+                  Node parent;
+                  mydatabase.read(parent, last_pos);
+                  for (int i = 0; i < parent.now_size; i++) {
+                    if (parent.datas[i] == to_erase) {
+                      to_update.son = parent.datas[i].son;
+                      parent.datas[i] = to_update;
+                      mydatabase.write(parent, last_pos);
+                    }
+                  }
+                }
                 int left;
                 left = res.left_sibling;
                 Node left_s;
-                mydatabase.read(left_s, res.right_sibling); // 读入右儿子。
+                mydatabase.read(left_s, res.left_sibling); // 读入右儿子。
                 if (left_s.now_size >= (size / 2)) {
                   std::memmove(&res.datas[1], &res.datas[0],
                                res.now_size * sizeof(MyData));
-                  res.datas[0] = left_s.datas[res.now_size - 1];
+                  res.datas[0] = left_s.datas[left_s.now_size - 1];
                   auto to_change = left_s.datas[left_s.now_size - 1];
                   auto to_update = left_s.datas[left_s.now_size - 2];
                   left_s.now_size--;
@@ -552,10 +566,11 @@ public:
                     }
                   }
                 } else { // 说明旁边的节点数目数目已经足够少。
+                std::cout << left << "C" << std::endl;
                   std::memmove(&res.datas[left_s.now_size], &res.datas[0],
                                res.now_size * sizeof(MyData));
                   std::memmove(&res.datas[0], &left_s.datas[0],
-                               left_s.now_size);
+                               left_s.now_size * sizeof(MyData));
                   res.now_size += left_s.now_size;
                   res.left_sibling = left_s.left_sibling;
                   mydatabase.write(res, pos);
@@ -565,7 +580,7 @@ public:
                     left_s.right_sibling = pos;
                     mydatabase.write(double_left, left_s.left_sibling);
                   }
-                  auto to_change = res.datas[left_s.left_sibling - 1];
+                  auto to_change = res.datas[left_s.now_size - 1];
                   Node parent;
                   mydatabase.read(parent, last_pos);
                   for (int i = 0; i < parent.now_size; i++) {
@@ -580,6 +595,7 @@ public:
                       break;
                     }
                   }
+                  mydatabase.write(res, pos);
                   return true;
                 }
               }
@@ -656,6 +672,7 @@ public:
                       }
                     }
                   }
+                  mydatabase.write(res, pos);
                   return true;
                 }
                 if (where != (how_many - 1)) {
@@ -720,14 +737,27 @@ public:
                     return true;
                   }
                 } else {
+                  if (i == res.now_size) {
+                    auto to_erase = res.datas[res.now_size];
+                    auto to_update = res.datas[res.now_size - 1];
+                    Node parent;
+                    mydatabase.read(parent, last_pos);
+                    for (int i = 0; i < parent.now_size; i++) {
+                      if (parent.datas[i] == to_erase) {
+                        to_update.son = parent.datas[i].son;
+                        parent.datas[i] = to_update;
+                        mydatabase.write(parent, last_pos);
+                      }
+                    }
+                  }
                   int left;
                   left = res.left_sibling;
                   Node left_s;
-                  mydatabase.read(left_s, res.right_sibling); // 读入右儿子。
+                  mydatabase.read(left_s, res.left_sibling); // 读入右儿子。
                   if (left_s.now_size >= (size / 2)) {
                     std::memmove(&res.datas[1], &res.datas[0],
                                  res.now_size * sizeof(MyData));
-                    res.datas[0] = left_s.datas[res.now_size - 1];
+                    res.datas[0] = left_s.datas[left_s.now_size - 1];
                     auto to_change = left_s.datas[left_s.now_size - 1];
                     auto to_update = left_s.datas[left_s.now_size - 2];
                     left_s.now_size--;
@@ -748,7 +778,7 @@ public:
                     std::memmove(&res.datas[left_s.now_size], &res.datas[0],
                                  res.now_size * sizeof(MyData));
                     std::memmove(&res.datas[0], &left_s.datas[0],
-                                 left_s.now_size);
+                                 left_s.now_size * sizeof(MyData));
                     res.now_size += left_s.now_size;
                     res.left_sibling = left_s.left_sibling;
                     mydatabase.write(res, pos);
@@ -758,7 +788,7 @@ public:
                       left_s.right_sibling = pos;
                       mydatabase.write(double_left, left_s.left_sibling);
                     }
-                    auto to_change = res.datas[left_s.left_sibling - 1];
+                    auto to_change = res.datas[left_s.now_size - 1];
                     Node parent;
                     mydatabase.read(parent, last_pos);
                     for (int i = 0; i < parent.now_size; i++) {
@@ -773,10 +803,12 @@ public:
                         break;
                       }
                     }
+                    mydatabase.write(res, pos);
                     return true;
                   }
                 }
               }
+              mydatabase.write(res, pos);
               return true;
             }
           }
@@ -789,11 +821,12 @@ public:
 int main() {
   std::ios::sync_with_stdio(false);
   BPT<int> test("database");
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 15; i++) {
     test.Insert(1, 2, i);
   }
-  // test.Erase(1, 2, 6);
-  for (int i = 1; i <= 4; i++) {
+   test.Erase(1, 2, 1);
+  test.Erase(1, 2, 0);
+  for (int i = 1; i <= 10; i++) {
     test.Check(i);
     std::cout << std::endl;
   }
