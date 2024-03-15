@@ -91,7 +91,7 @@ inline unsigned long long MyHash(const std::string &txt,
   }
   return ans;
 }
-template <class Value = int, int size = 550> class BPT {
+template <class Value = int, int size = 600> class BPT {
 private:
   int B_total = 0;
   int B_root = 0;
