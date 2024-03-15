@@ -84,7 +84,8 @@ public:
     return;
   }
 };
-unsigned long long MyHash(std::string txt, unsigned long long exp) {
+inline unsigned long long MyHash(const std::string &txt,
+                                 const unsigned long long &exp) {
   unsigned long long ans = 0;
   for (int i = 0; i < txt.size(); i++) {
     ans *= exp;
@@ -92,7 +93,7 @@ unsigned long long MyHash(std::string txt, unsigned long long exp) {
   }
   return ans;
 }
-template <class Value = int, int size = 500> class BPT {
+template <class Value = int, int size = 550> class BPT {
 private:
   int B_total = 0;
   int B_root = 0;
@@ -132,14 +133,14 @@ private:
     bool operator!=(const MyData &other) { return !(*this == other); }
   };
   struct Node {
-    MyData datas[size + 3];
+    MyData datas[size + 1];
     int left_sibling = 0;
     int right_sibling = 0;
     int now_size = 0;
     int pos = 0;
   };
   MemoryRiver<Node, 3> mydatabase;
-  void NodeInsert(MyData to_insert, int pos, int last_node) {
+  void NodeInsert(const MyData &to_insert, const int &pos, const int &last_node) {
     Node res;
     mydatabase.read(res, pos);
     int find = 0;
@@ -171,7 +172,7 @@ private:
     }
     return;
   }
-  void Split(int pos, int last_node) {
+  void Split(const int &pos, const int &last_node) {
     Node res;
     Node new_node;
     mydatabase.read(res, pos);
@@ -219,7 +220,7 @@ private:
     mydatabase.write(new_node, new_node.pos);
     return;
   }
-  void OnlyInsert(int pos, MyData to_insert) {
+  void OnlyInsert(const int &pos, const MyData &to_insert) {
     Node res;
     mydatabase.read(res, pos);
     int find = 0;
@@ -237,17 +238,20 @@ private:
   }
 
 public:
-  BPT() = default;
-  BPT(std::string name) { mydatabase.ChangeName(name);
-  mydatabase.get_info(B_total, 1);
-  mydatabase.get_info(B_root, 2);
-  mydatabase.get_info(B_current, 3); }
+  BPT() = delete;
+  BPT(std::string name) {
+    mydatabase.ChangeName(name);
+    mydatabase.get_info(B_total, 1);
+    mydatabase.get_info(B_root, 2);
+    mydatabase.get_info(B_current, 3);
+  }
   ~BPT() {
     mydatabase.write_info(B_total, 1);
     mydatabase.write_info(B_root, 2);
     mydatabase.write_info(B_current, 3);
   }
-  void Insert(const unsigned long long &hash1, unsigned long long hash2, const int &value) {
+  void Insert(const unsigned long long &hash1, unsigned long long hash2,
+              const int &value) {
     int total = B_total;
     if (total == 0) {
       Node res1;
@@ -273,11 +277,9 @@ public:
     }
     return;
   }
-  void find(const unsigned long long &hash_1, const unsigned long long &hash_2) {
-    int root, total;
-    total = B_total;
-    root = B_root;
-    if (total == 0) {
+  void find(const unsigned long long &hash_1,
+            const unsigned long long &hash_2) {
+    if (B_total == 0) {
       std::cout << "null" << '\n';
       return;
     }
@@ -286,7 +288,7 @@ public:
     to_find.hash1 = hash_1;
     to_find.hash2 = hash_2;
     to_find.value = minus_max;
-    mydatabase.read(res, root);
+    mydatabase.read(res, B_root);
     while (res.datas[0].son != 0) {
       for (int i = 0; i < res.now_size; i++) {
         if (to_find < res.datas[i]) {
@@ -294,7 +296,7 @@ public:
           break;
         }
         if (i == (res.now_size - 1)) {
-          std::cout << "null" << std::endl;
+          std::cout << "null" << '\n';
           return;
         }
       }
@@ -342,72 +344,21 @@ public:
     }
     return;
   }
-  void PrintRoot() {
-    int root;
-    mydatabase.get_info(root, 2);
-    Node res;
-    mydatabase.read(res, root);
-    for (int i = 0; i < res.now_size; i++) {
-      std::cout << res.datas[i].value << ' ' << res.datas[i].son << '\n';
-    }
-    return;
-  }
-  void Tranverse() {
-    int root;
-    mydatabase.get_info(root, 2);
-    Node res;
-    mydatabase.read(res, root);
-    while (res.datas[0].son != 0) {
-      mydatabase.read(res, res.datas[0].son);
-    }
-    int big = -1;
-    while (res.right_sibling) {
-      std::cout << res.datas[res.now_size - 1].value << ' ' << big << '\n';
-      big = res.datas[res.now_size - 1].value;
-      mydatabase.read(res, res.right_sibling);
-    }
-    std::cout << res.datas[res.now_size - 1].value << ' ' << big << '\n';
-    return;
-  }
-  void Output() {
-    for (int i = 1; i <= 30; i++) {
-      Node res;
-      mydatabase.read(res, i);
-      std::cout << i << ' ' << res.datas[0].value << '\n';
-    }
-    return;
-  }
-  void Check(int pos) {
-    Node x;
-    mydatabase.read(x, pos);
-    std::cout << x.pos << ' ' << x.left_sibling << ' ' << x.right_sibling << ' '
-              << x.now_size << '\n';
-    for (int i = 0; i < x.now_size; i++) {
-      std::cout << x.datas[i].value << ' ' << x.datas[i].son << '\n';
-    }
-  }
-  void Erase(const unsigned long long &hash_1, const unsigned long long &hash_2,const int& value) {
-    int root;
-    root = B_root;
-    bool status = 0;
+  void Erase(const unsigned long long &hash_1, const unsigned long long &hash_2,
+             const int &value) {
     MyData to_delete;
     to_delete.hash1 = hash_1;
     to_delete.hash2 = hash_2;
     to_delete.value = value;
-    status = NodeErase(root, 0, to_delete, 0, 0);
-    if (status != false) {
-      int total;
-      total = B_total;
-      total--;
-      B_total = total;
+    if (NodeErase(B_root, 0, to_delete, 0, 0) != false) {
+      B_total--;
     }
     return;
   }
-  bool NodeErase(const int& pos, const int&  last_pos, MyData to_delete, const int&  where,
-                 const int&  how_many) {
+  bool NodeErase(const int &pos, const int &last_pos, MyData to_delete,
+                 const int &where, const int &how_many) {
     // pos表示当前节点号、父亲节点号、待删除内容，这个节点是父亲节点的多少号元素、父亲节点有多少个元素。
     Node res;
-    MyData nothing;
     mydatabase.read(res, pos);
     int found = 0;
     auto last_one = res.datas[res.now_size - 1];
@@ -864,9 +815,8 @@ public:
 
 int main() {
   std::ios::sync_with_stdio(false);
-  
-std::cin.tie(0);
-std::cout.tie(0);
+  std::cin.tie(0);
+  std::cout.tie(0);
   BPT<int> test("database");
   int n;
   std::cin >> n;
