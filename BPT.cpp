@@ -537,7 +537,7 @@ private:
     Node new_node;
     mydatabase.read(res, pos);
     int now_size = res.now_size;
-    int half = now_size / 2;
+    int half = now_size >> 1;
     std::memmove(&new_node.datas[0], &res.datas[0], half * sizeof(MyData));
     std::memmove(&res.datas[0], &res.datas[half],
                  (now_size - half) * sizeof(MyData));
@@ -657,7 +657,7 @@ private:
               mydatabase.write(res, pos);
               return true;
             }
-            if (res.now_size < (size / 2 - 1)) {
+            if (res.now_size < ((size >> 2) - 1)) {
               if ((where == 0) &&
                   (how_many == 1)) { // 说明这个节点没有办法进行调整。
                 if (i == res.now_size) {
@@ -683,7 +683,7 @@ private:
                 right = res.right_sibling;
                 Node right_s;
                 mydatabase.read(right_s, res.right_sibling); // 读入右儿子。
-                if (right_s.now_size >= (size / 2)) {
+                if (right_s.now_size >= (size >> 1)) {
                   auto to_update = res.datas[res.now_size];
                   res.datas[res.now_size] = right_s.datas[0];
                   res.now_size++;
@@ -757,7 +757,7 @@ private:
                 left = res.left_sibling;
                 Node left_s;
                 mydatabase.read(left_s, res.left_sibling); // 读入右儿子。
-                if (left_s.now_size >= (size / 2)) {
+                if (left_s.now_size >= (size >> 1)) {
                   std::memmove(&res.datas[1], &res.datas[0],
                                res.now_size * sizeof(MyData));
                   res.datas[0] = left_s.datas[left_s.now_size - 1];
@@ -886,7 +886,7 @@ private:
               }
             }
           }
-          if (res.now_size < (size / 2 - 1)) {
+          if (res.now_size < ((size >>1) - 1)) {
             if ((where == 0) &&
                 (how_many == 1)) { // 说明这个节点没有办法进行调整。
               if (i == res.now_size) {
@@ -912,7 +912,7 @@ private:
               right = res.right_sibling;
               Node right_s;
               mydatabase.read(right_s, res.right_sibling); // 读入右儿子。
-              if (right_s.now_size >= (size / 2)) {
+              if (right_s.now_size >= (size >> 1)) {
                 auto to_update = res.datas[res.now_size];
                 res.datas[res.now_size] = right_s.datas[0];
                 res.now_size++;
@@ -985,7 +985,7 @@ private:
               left = res.left_sibling;
               Node left_s;
               mydatabase.read(left_s, res.left_sibling); // 读入右儿子。
-              if (left_s.now_size >= (size / 2)) {
+              if (left_s.now_size >= (size >> 1)) {
                 std::memmove(&res.datas[1], &res.datas[0],
                              res.now_size * sizeof(MyData));
                 res.datas[0] = left_s.datas[left_s.now_size - 1];
