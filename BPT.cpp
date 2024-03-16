@@ -1,26 +1,23 @@
-#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <type_traits>
-#include <cassert>
 const unsigned long long exp1 = 13331, exp2 = 131;
 const int minus_max = -2147483648;
 const int maxn = 2147483647;
 namespace sjtu {
 template <typename T> class vector {
 private:
-  T **array;
+  T *array;
   int total = 0;
   int array_size;
   void DoubleArray() {
     if (array_size == 0) {
-      array = new T *[2];
+      array = new T [2];
       array_size = 2;
     } else {
-      T **tmp = new T *[(total + 1) * 2];
+      T *tmp = new T [(total + 1) * 2];
       memmove(tmp, array, sizeof(T *) * total);
       delete[] array;
       array = tmp;
@@ -29,7 +26,7 @@ private:
     return;
   }
   void ShrinkArray() {
-    T **tmp = new T *[(total + 1) * 2];
+    T *tmp = new T [(total + 1) * 2];
     memmove(tmp, array, sizeof(T *) * total);
     delete[] array;
     array = tmp;
@@ -261,19 +258,19 @@ public:
     if (pos > (total - 1)) {
       throw(2);
     }
-    return *(array[pos]);
+    return (array[pos]);
   }
   const T &at(const size_t &pos) const {
     if (pos > (total - 1)) {
       throw(2);
     }
-    return *(*array[pos]);
+    return (*array[pos]);
   }
   T &operator[](const size_t &pos) {
     if (pos > (total - 1)) {
       throw(2);
     }
-    return *(array[pos]);
+    return (array[pos]);
   }
   const T &operator[](const size_t &pos) const {
     if (pos > (total - 1)) {
@@ -285,10 +282,10 @@ public:
     if (total == 0) {
       throw(3);
     }
-    return *(array[0]);
+    return (array[0]);
   }
   const T &back() const {
-    return *(array[total - 1]);
+    return (array[total - 1]);
   }
   iterator begin() { return iterator(0, this); }
   const_iterator cbegin() const { return const_iterator(0, this); }
@@ -297,9 +294,6 @@ public:
   bool empty() const { return total == 0; }
   size_t size() const { return total; }
   void clear() {
-    for (int i = 0; i < total; i++) {
-      delete array[i];
-    }
     delete[] array;
     total = 0;
     array_size = 0;
@@ -347,7 +341,7 @@ public:
     if (array_size <= (total + 1)) {
       DoubleArray();
     }
-    array[total] = new T(value);
+    array[total] = value;
     total++;
     return;
   }
@@ -355,7 +349,6 @@ public:
     if (total == 0) {
       throw(3);
     }
-    delete array[total - 1];
     total--;
     if (total <= (array_size / 4)) {
       ShrinkArray();
