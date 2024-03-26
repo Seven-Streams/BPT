@@ -424,6 +424,7 @@ public:
 template <class W, int info_len = 3> class MemoryRiver { // 应当采取3个参数。
   // 一个存储目前的元素个数，一个存储目前的根节点，一个存储当前的块应该写入到哪里。
 private:
+  std::mutex file_mutex;
   std::fstream file;
   std::string file_name;   // 文件名。
   int sizeofT = sizeof(W); // W的大小。
@@ -455,6 +456,7 @@ public:
 
   // 读出第n个int的值赋给tmp，1_base
   void get_info(int &tmp, int n) {
+    std::unique_lock my_lock(file_mutex);
     if (n > info_len)
       return;
     file.open(file_name);
@@ -466,6 +468,7 @@ public:
 
   // 将tmp写入第n个int的位置，1_base
   void write_info(int tmp, int n) {
+        std::unique_lock my_lock(file_mutex);
     if (n > info_len)
       return;
     file.open(file_name);
@@ -479,6 +482,7 @@ public:
   // 位置索引意味着当输入正确的位置索引index，在以下三个函数中都能顺利的找到目标对象进行操作
   // 位置索引index可以取为对象写入的起始位置,1base
   void write(W &t, int which_node, int size = 1) {
+        std::unique_lock my_lock(file_mutex);
     int place = info_len * 4;
     place += (which_node - 1) * sizeofT;
     file.open(file_name);
@@ -488,6 +492,7 @@ public:
     return;
   }
   void read(W &t, int which_node, int size = 1) {
+        std::unique_lock my_lock(file_mutex);
     int place = info_len * 4;
     place += (which_node - 1) * sizeofT;
     file.open(file_name);
