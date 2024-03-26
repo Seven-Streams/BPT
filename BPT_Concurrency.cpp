@@ -417,7 +417,8 @@ public:
     return;
   }
   void CheckStatus() {
-    std::cout << "read" << is_reading << ' ' << "write" << is_writing << std::endl;
+    std::cout << "read" << is_reading << ' ' << "write" << is_writing
+              << std::endl;
   }
 };
 } // namespace sjtu
@@ -468,7 +469,7 @@ public:
 
   // 将tmp写入第n个int的位置，1_base
   void write_info(int tmp, int n) {
-        std::unique_lock my_lock(file_mutex);
+    std::unique_lock my_lock(file_mutex);
     if (n > info_len)
       return;
     file.open(file_name);
@@ -482,7 +483,7 @@ public:
   // 位置索引意味着当输入正确的位置索引index，在以下三个函数中都能顺利的找到目标对象进行操作
   // 位置索引index可以取为对象写入的起始位置,1base
   void write(W &t, int which_node, int size = 1) {
-        std::unique_lock my_lock(file_mutex);
+    std::unique_lock my_lock(file_mutex);
     int place = info_len * 4;
     place += (which_node - 1) * sizeofT;
     file.open(file_name);
@@ -492,7 +493,7 @@ public:
     return;
   }
   void read(W &t, int which_node, int size = 1) {
-        std::unique_lock my_lock(file_mutex);
+    std::unique_lock my_lock(file_mutex);
     int place = info_len * 4;
     place += (which_node - 1) * sizeofT;
     file.open(file_name);
@@ -517,7 +518,7 @@ private:
   int B_total = 0;
   int B_root = 0;
   int B_current = 0;
-  sjtu::vector<sjtu::ReadWriteLock> locks;
+  sjtu::ReadWriteLock locks[10000];
   struct MyData {
     unsigned long long hash1 = 0;
     unsigned long long hash2 = 0;
@@ -589,8 +590,10 @@ private:
         mydatabase.write(res, pos);
       }
       Node to_check;
+      locks[res.datas[find].son].WriteLock();
       mydatabase.read(to_check, res.datas[find].son);
-      if(to_check.now_size < (size - 5)) {
+      locks[res.datas[find].son].WriteUnlock();
+      if (to_check.now_size < (size - 5)) {
         locks[pos].WriteUnlock();
         NodeInsert(to_insert, res.datas[find].son, res.pos, res);
         return;
@@ -617,7 +620,6 @@ private:
     new_node.left_sibling = res.left_sibling;
     new_node.right_sibling = res.pos;
     if (recycle.empty()) {
-      locks.AddLock();
       B_current++;
       new_node.pos = B_current; // 至此，所有新节点已经准备完毕。
     } else {
@@ -642,7 +644,6 @@ private:
         current = B_current;
         current++;
         B_current = current;
-        locks.AddLock();
       } else {
         current = recycle.back();
         recycle.pop_back();
@@ -780,7 +781,7 @@ private:
                                (right_s.now_size - 1) * sizeof(MyData));
                   right_s.now_size--;
                   mydatabase.write(right_s, right_s.pos);
-                  locks[res.right_sibling].WriteUnlock();
+                  locks[right].WriteUnlock();
                   Node parent;
                   mydatabase.read(parent, last_pos);
                   for (int i = 0; i < parent.now_size; i++) {
@@ -908,6 +909,7 @@ private:
                   }
                   mydatabase.write(res, pos);
                   locks[left].WriteUnlock();
+                  recycle.push_back(left);
                   locks[pos].WriteUnlock();
                   return true;
                 }
@@ -943,7 +945,7 @@ private:
             bool ans =
                 NodeErase(res.datas[i].son, pos, to_delete, i, res.now_size);
             return ans;
-          }//说明不可能产生影响。
+          } // 说明不可能产生影响。
           bool ans =
               NodeErase(res.datas[i].son, pos, to_delete, i, res.now_size);
           if (ans == false) {
@@ -1093,7 +1095,7 @@ private:
                 }
                 mydatabase.write(res, pos);
                 locks[right].WriteUnlock();
-                locks[right].WriteUnlock();
+                locks[pos].WriteUnlock();
                 return true;
               }
             } else {
@@ -1215,9 +1217,6 @@ public:
       myrecycle.read(res, i);
       recycle.push_back(res);
     }
-    for (int i = 0; i <= B_current; i++) {
-      locks.AddLock();
-    }
   }
   ~BPT() {
     mydatabase.write_info(B_total, 1);
@@ -1230,8 +1229,7 @@ public:
   }
   void Insert(const unsigned long long &hash1, unsigned long long hash2,
               const int &value) {
-    int total = B_total;
-    if (total == 0) {
+    if (B_total == 0) {
       Node res1;
       recycle.clear();
       res1.datas[0].hash1 = hash1;
@@ -1243,8 +1241,6 @@ public:
       B_root = 1;
       B_total = 1;
       B_current = 1;
-      locks.clear();
-      locks.AddLock();
     } else {
       int root;
       root = B_root;
@@ -1253,8 +1249,7 @@ public:
       res.hash2 = hash2;
       res.value = value;
       NodeInsert(res, root, 0, nothing);
-      total++;
-      B_total = total;
+      B_total++;
     }
     return;
   }
@@ -1335,7 +1330,7 @@ public:
     return;
   }
   void Check() {
-    for(int i = 0; i < locks.size(); i++) {
+    for (int i = 0; i < 10000; i++) {
       std::cout << i << ' ';
       locks[i].CheckStatus();
     }
@@ -1345,38 +1340,38 @@ public:
 BPT<int> test("database");
 void Listen() {
   std::string op;
-   std::cin >> op;
-    if (op == "insert") {
-      std::string index;
-      int value;
-      std::cin >> index;
-      std::cin >> value;
-      unsigned long long hash1, hash2;
-      hash1 = MyHash(index, exp1);
-      hash2 = MyHash(index, exp2);
-      test.Insert(hash1, hash2, value);
-      return;
-    }
-    if (op == "find") {
-      std::string index;
-      std::cin >> index;
-      unsigned long long hash1, hash2;
-      hash1 = MyHash(index, exp1);
-      hash2 = MyHash(index, exp2);
-      test.find(hash1, hash2);
-      return;
-    }
-    if (op == "delete") {
-      std::string index;
-      int value;
-      std::cin >> index;
-      std::cin >> value;
-      unsigned long long hash1, hash2;
-      hash1 = MyHash(index, exp1);
-      hash2 = MyHash(index, exp2);
-      test.Erase(hash1, hash2, value);
-      return;
-    }
+  std::cin >> op;
+  if (op == "insert") {
+    std::string index;
+    int value;
+    std::cin >> index;
+    std::cin >> value;
+    unsigned long long hash1, hash2;
+    hash1 = MyHash(index, exp1);
+    hash2 = MyHash(index, exp2);
+    test.Insert(hash1, hash2, value);
+    return;
+  }
+  if (op == "find") {
+    std::string index;
+    std::cin >> index;
+    unsigned long long hash1, hash2;
+    hash1 = MyHash(index, exp1);
+    hash2 = MyHash(index, exp2);
+    test.find(hash1, hash2);
+    return;
+  }
+  if (op == "delete") {
+    std::string index;
+    int value;
+    std::cin >> index;
+    std::cin >> value;
+    unsigned long long hash1, hash2;
+    hash1 = MyHash(index, exp1);
+    hash2 = MyHash(index, exp2);
+    test.Erase(hash1, hash2, value);
+    return;
+  }
 }
 int main() {
   std::ios::sync_with_stdio(false);

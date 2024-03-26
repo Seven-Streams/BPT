@@ -958,6 +958,7 @@ private:
                   mydatabase.write(double_right, right_s.right_sibling);
                 }
                 mydatabase.write(res, pos);
+                recycle.push_back(right);
                 return true;
               }
             } else {
@@ -1026,6 +1027,7 @@ private:
                     break;
                   }
                 }
+                                recycle.push_back(left);
                 mydatabase.write(res, pos);
                 return true;
               }
