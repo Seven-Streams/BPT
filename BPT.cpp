@@ -554,6 +554,7 @@ private:
   MemoryRiver<int, 1> myrecycle;
   void NodeInsert(const MyData &to_insert, const int &pos, const int &last_node,
                   const Node &last_parent) {
+    locks[pos].WriteLock();
     Node res;
     mydatabase.read(res, pos);
     int find = 0;
@@ -578,11 +579,18 @@ private:
         res.datas[find] = x;
         mydatabase.write(res, pos);
       }
+      Node to_check;
+      mydatabase.read(to_check, res.datas[find].son);
+      if(to_check.now_size < (size - 5)) {
+        locks[pos].WriteUnlock();
+        NodeInsert(to_insert, res.datas[find].son, res.pos, res);
+      }
       NodeInsert(to_insert, res.datas[find].son, res.pos, res);
     }
     if (res.now_size >= size) {
       Split(res.pos, last_node, last_parent);
     }
+    locks[pos].WriteUnlock();
     return;
   }
   void Split(const int &pos, const int &last_node, Node parent) {
@@ -599,6 +607,7 @@ private:
     new_node.left_sibling = res.left_sibling;
     new_node.right_sibling = res.pos;
     if (recycle.empty()) {
+      locks.AddLock();
       B_current++;
       new_node.pos = B_current; // 至此，所有新节点已经准备完毕。
     } else {
@@ -607,9 +616,11 @@ private:
     }
     res.left_sibling = new_node.pos;
     Node res1;
+    locks[new_node.left_sibling].WriteLock();
     mydatabase.read(res1, new_node.left_sibling);
     res1.right_sibling = new_node.pos;
     mydatabase.write(res1, res1.pos);
+    locks[res1.pos].WriteUnlock();
     MyData index;
     index = new_node.datas[half - 1];
     index.son = new_node.pos;
@@ -621,6 +632,7 @@ private:
         current = B_current;
         current++;
         B_current = current;
+        locks.AddLock();
       } else {
         current = recycle.back();
         recycle.pop_back();
@@ -1307,6 +1319,9 @@ public:
     return;
   }
 };
+void Listen(std::string txt) {
+  
+}
 BPT<int> test("database");
 int main() {
   std::ios::sync_with_stdio(false);
