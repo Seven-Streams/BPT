@@ -1,3 +1,4 @@
+#include <chrono>
 #include <condition_variable>
 #include <cstring>
 #include <filesystem>
@@ -415,6 +416,9 @@ public:
     is_writing = false;
     return;
   }
+  void CheckStatus() {
+    std::cout << "read" << is_reading << ' ' << "write" << is_writing << std::endl;
+  }
 };
 } // namespace sjtu
 template <class W, int info_len = 3> class MemoryRiver { // 应当采取3个参数。
@@ -584,6 +588,7 @@ private:
       if(to_check.now_size < (size - 5)) {
         locks[pos].WriteUnlock();
         NodeInsert(to_insert, res.datas[find].son, res.pos, res);
+        return;
       }
       NodeInsert(to_insert, res.datas[find].son, res.pos, res);
     }
@@ -670,7 +675,9 @@ private:
   bool NodeErase(const int &pos, const int &last_pos, MyData to_delete,
                  const int &where, const int &how_many) {
     // pos表示当前节点号、父亲节点号、待删除内容，这个节点是父亲节点的多少号元素、父亲节点有多少个元素。
+    // std::cout << "ASKFOR" << pos << std::endl;
     locks[pos].WriteLock();
+    // std::cout << to_delete.value << std::endl;
     Node res;
     mydatabase.read(res, pos);
     int found = 0;
@@ -749,8 +756,8 @@ private:
                     }
                   }
                 }
-                locks[pos].WriteUnlock();
                 mydatabase.write(res, pos);
+                locks[pos].WriteUnlock();
                 return true;
               }
               if (where != (how_many - 1)) {
@@ -777,6 +784,7 @@ private:
                       to_change.son = parent.datas[i].son;
                       parent.datas[i] = to_change;
                       mydatabase.write(parent, last_pos);
+                      locks[pos].WriteUnlock();
                       return true; // 借块操作完成。右兄弟节点、本身、父节点均得到更新。
                     }
                   }
@@ -1230,6 +1238,8 @@ public:
       B_root = 1;
       B_total = 1;
       B_current = 1;
+      locks.clear();
+      locks.AddLock();
     } else {
       int root;
       root = B_root;
@@ -1313,25 +1323,24 @@ public:
     to_delete.hash1 = hash_1;
     to_delete.hash2 = hash_2;
     to_delete.value = value;
+    // std::cout << "ROOT" << B_root << std::endl;
     if (NodeErase(B_root, 0, to_delete, 0, 0) != false) {
       B_total--;
     }
     return;
   }
+  void Check() {
+    for(int i = 0; i < locks.size(); i++) {
+      std::cout << i << ' ';
+      locks[i].CheckStatus();
+    }
+    return;
+  }
 };
-void Listen(std::string txt) {
-  
-}
 BPT<int> test("database");
-int main() {
-  std::ios::sync_with_stdio(false);
-  std::cin.tie(0);
-  std::cout.tie(0);
-  int n;
-  std::cin >> n;
+void Listen() {
   std::string op;
-  for (int i = 0; i < n; i++) {
-    std::cin >> op;
+   std::cin >> op;
     if (op == "insert") {
       std::string index;
       int value;
@@ -1341,7 +1350,7 @@ int main() {
       hash1 = MyHash(index, exp1);
       hash2 = MyHash(index, exp2);
       test.Insert(hash1, hash2, value);
-      continue;
+      return;
     }
     if (op == "find") {
       std::string index;
@@ -1350,7 +1359,7 @@ int main() {
       hash1 = MyHash(index, exp1);
       hash2 = MyHash(index, exp2);
       test.find(hash1, hash2);
-      continue;
+      return;
     }
     if (op == "delete") {
       std::string index;
@@ -1361,8 +1370,22 @@ int main() {
       hash1 = MyHash(index, exp1);
       hash2 = MyHash(index, exp2);
       test.Erase(hash1, hash2, value);
-      continue;
+      return;
     }
+}
+int main() {
+  std::ios::sync_with_stdio(false);
+  std::cin.tie(0);
+  std::cout.tie(0);
+  // freopen("t.txt", "r", stdin);
+  int n;
+  std::cin >> n;
+  for (int i = 0; i < n; i++) {
+    // std::cout << i << std::endl;
+    std::thread task(Listen);
+    task.join();
   }
+  // std::this_thread::sleep_for(std::chrono::seconds(1));
+  // test.Check();
   return 0;
 }
