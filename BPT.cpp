@@ -1,8 +1,12 @@
+#include <condition_variable>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <string>
+#include <thread>
+#include <shared_mutex>
 const unsigned long long exp1 = 13331, exp2 = 131;
 const int minus_max = -2147483648;
 const int maxn = 2147483647;
@@ -1172,7 +1176,68 @@ public:
     return;
   }
 };
-
+namespace sjtu {
+  class ReadWriteLock {
+    private:
+      std::mutex protection;
+      std::shared_mutex my_mutex;
+      std::condition_variable_any my_cv;
+      bool is_writing = 0;
+      sjtu::vector<std::thread::id> my_queue;
+      int is_reading = 0;
+    public:
+    void ReadLock() {
+      std::shared_lock my_lock(my_mutex);
+      auto id = std::this_thread::get_id();
+      std::unique_lock protect(protection);
+      my_queue.push_back(id);
+      protect.unlock();
+      my_cv.wait(my_lock, [&]{ return (!is_writing) && (id == my_queue[0]);});
+      protect.lock();
+      is_reading++;
+      my_queue.erase(0);
+      protect.unlock();
+      return;
+    }
+    void WriteLock() {
+      std::unique_lock my_lock(my_mutex);
+      auto id = std::this_thread::get_id();
+      std::unique_lock protect(protection);
+      my_queue.push_back(id);
+      protect.unlock();
+      my_cv.wait(my_lock, [&]{ return (!is_writing) && (id == my_queue[0]) && (!is_reading);});  
+      protect.lock();
+      is_writing = true;
+      my_queue.erase(0);
+      protect.unlock();
+      return;        
+    }
+    void ReadUnlock() {
+      std::unique_lock protect(protection);
+      is_reading--;
+      return;
+    }
+    void WriteUnlock() {
+      std::unique_lock protect(protection);
+      is_writing = false;
+      return;
+    }
+  };  
+}
+int ans = 0;
+sjtu::ReadWriteLock my_lock;
+void write() {
+  my_lock.WriteLock();
+  ans++;
+  my_lock.WriteUnlock();
+  return;
+}
+void read() {
+  my_lock.ReadLock();
+  std::cout << ans << std::endl;
+  my_lock.ReadUnlock();
+  return;
+}
 int main() {
   std::ios::sync_with_stdio(false);
   std::cin.tie(0);
