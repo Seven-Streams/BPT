@@ -1,8 +1,14 @@
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <mutex>
+#include <shared_mutex>
+#include <sstream>
 #include <string>
+#include <thread>
 const unsigned long long exp1 = 13331, exp2 = 131;
 const int minus_max = -2147483648;
 const int maxn = 2147483647;
@@ -14,10 +20,10 @@ private:
   int array_size;
   void DoubleArray() {
     if (array_size == 0) {
-      array = new T [2];
+      array = new T[2];
       array_size = 2;
     } else {
-      T *tmp = new T [(total + 1) * 2];
+      T *tmp = new T[(total + 1) * 2];
       memmove(tmp, array, sizeof(T *) * total);
       delete[] array;
       array = tmp;
@@ -26,7 +32,7 @@ private:
     return;
   }
   void ShrinkArray() {
-    T *tmp = new T [(total + 1) * 2];
+    T *tmp = new T[(total + 1) * 2];
     memmove(tmp, array, sizeof(T *) * total);
     delete[] array;
     array = tmp;
@@ -284,9 +290,7 @@ public:
     }
     return (array[0]);
   }
-  const T &back() const {
-    return (array[total - 1]);
-  }
+  const T &back() const { return (array[total - 1]); }
   iterator begin() { return iterator(0, this); }
   const_iterator cbegin() const { return const_iterator(0, this); }
   iterator end() { return iterator(total, this); }
@@ -329,7 +333,6 @@ public:
     if (ind >= total) {
       throw(2);
     }
-    delete (this->array)[ind];
     std::memmove(array + ind, array + ind + 1, sizeof(T *) * (total - ind - 1));
     total--;
     if (total <= (array_size / 4)) {
@@ -345,6 +348,13 @@ public:
     total++;
     return;
   }
+  void AddLock() {
+    if (array_size <= (total + 1)) {
+      DoubleArray();
+    }
+    total++;
+    return;
+  }
   void pop_back() {
     if (total == 0) {
       throw(3);
@@ -356,7 +366,60 @@ public:
     return;
   }
 };
+} // namespace sjtu
+namespace sjtu {
+class ReadWriteLock {
+private:
+  std::mutex protection;
+  std::shared_mutex my_mutex;
+  std::condition_variable_any my_cv;
+  bool is_writing = 0;
+  sjtu::vector<std::thread::id> my_queue;
+  int is_reading = 0;
 
+public:
+  void ReadLock() {
+    std::shared_lock my_lock(my_mutex);
+    auto id = std::this_thread::get_id();
+    std::unique_lock protect(protection);
+    my_queue.push_back(id);
+    protect.unlock();
+    my_cv.wait(my_lock, [&] { return (!is_writing) && (id == my_queue[0]); });
+    protect.lock();
+    is_reading++;
+    my_queue.erase(0);
+    protect.unlock();
+    return;
+  }
+  void WriteLock() {
+    std::unique_lock my_lock(my_mutex);
+    auto id = std::this_thread::get_id();
+    std::unique_lock protect(protection);
+    my_queue.push_back(id);
+    protect.unlock();
+    my_cv.wait(my_lock, [&] {
+      return (!is_writing) && (id == my_queue[0]) && (!is_reading);
+    });
+    protect.lock();
+    is_writing = true;
+    my_queue.erase(0);
+    protect.unlock();
+    return;
+  }
+  void ReadUnlock() {
+    std::unique_lock protect(protection);
+    is_reading--;
+    return;
+  }
+  void WriteUnlock() {
+    std::unique_lock protect(protection);
+    is_writing = false;
+    return;
+  }
+  void CheckStatus() {
+    std::cout << "read" << is_reading << ' ' << "write" << is_writing << std::endl;
+  }
+};
 } // namespace sjtu
 template <class W, int info_len = 3> class MemoryRiver { // 应当采取3个参数。
   // 一个存储目前的元素个数，一个存储目前的根节点，一个存储当前的块应该写入到哪里。
@@ -449,6 +512,7 @@ private:
   int B_total = 0;
   int B_root = 0;
   int B_current = 0;
+  sjtu::vector<sjtu::ReadWriteLock> locks;
   struct MyData {
     unsigned long long hash1 = 0;
     unsigned long long hash2 = 0;
@@ -494,6 +558,7 @@ private:
   MemoryRiver<int, 1> myrecycle;
   void NodeInsert(const MyData &to_insert, const int &pos, const int &last_node,
                   const Node &last_parent) {
+    locks[pos].WriteLock();
     Node res;
     mydatabase.read(res, pos);
     int find = 0;
@@ -518,11 +583,19 @@ private:
         res.datas[find] = x;
         mydatabase.write(res, pos);
       }
+      Node to_check;
+      mydatabase.read(to_check, res.datas[find].son);
+      if(to_check.now_size < (size - 5)) {
+        locks[pos].WriteUnlock();
+        NodeInsert(to_insert, res.datas[find].son, res.pos, res);
+        return;
+      }
       NodeInsert(to_insert, res.datas[find].son, res.pos, res);
     }
     if (res.now_size >= size) {
       Split(res.pos, last_node, last_parent);
     }
+    locks[pos].WriteUnlock();
     return;
   }
   void Split(const int &pos, const int &last_node, Node parent) {
@@ -539,6 +612,7 @@ private:
     new_node.left_sibling = res.left_sibling;
     new_node.right_sibling = res.pos;
     if (recycle.empty()) {
+      locks.AddLock();
       B_current++;
       new_node.pos = B_current; // 至此，所有新节点已经准备完毕。
     } else {
@@ -547,20 +621,23 @@ private:
     }
     res.left_sibling = new_node.pos;
     Node res1;
+    locks[new_node.left_sibling].WriteLock();
     mydatabase.read(res1, new_node.left_sibling);
     res1.right_sibling = new_node.pos;
     mydatabase.write(res1, res1.pos);
+    locks[res1.pos].WriteUnlock();
     MyData index;
     index = new_node.datas[half - 1];
     index.son = new_node.pos;
     if (last_node) {
       OnlyInsert(last_node, index, parent);
     } else {
-        int current;
+      int current;
       if (recycle.empty()) {
         current = B_current;
         current++;
         B_current = current;
+        locks.AddLock();
       } else {
         current = recycle.back();
         recycle.pop_back();
@@ -598,6 +675,9 @@ private:
   bool NodeErase(const int &pos, const int &last_pos, MyData to_delete,
                  const int &where, const int &how_many) {
     // pos表示当前节点号、父亲节点号、待删除内容，这个节点是父亲节点的多少号元素、父亲节点有多少个元素。
+    // std::cout << "ASKFOR" << pos << std::endl;
+    locks[pos].WriteLock();
+    // std::cout << to_delete.value << std::endl;
     Node res;
     mydatabase.read(res, pos);
     int found = 0;
@@ -606,21 +686,26 @@ private:
       if ((res.datas[i] > to_delete) || (res.datas[i] == to_delete)) {
         if (res.datas[i].son == 0) {
           if (res.datas[i] != to_delete) {
+            locks[pos].WriteUnlock();
             return false; // didn't find~
           } else {
             if (res.now_size == 1) { // 说明删空了。
               recycle.push_back(res.pos);
               if (res.left_sibling != 0) {
                 Node left;
+                locks[res.left_sibling].WriteLock();
                 mydatabase.read(left, res.left_sibling);
                 left.right_sibling = res.right_sibling;
                 mydatabase.write(left, res.left_sibling);
+                locks[res.left_sibling].WriteUnlock();
               }
               if (res.right_sibling != 0) {
                 Node right;
+                locks[res.right_sibling].WriteLock();
                 mydatabase.read(right, res.right_sibling);
                 right.left_sibling = res.left_sibling;
                 mydatabase.write(right, res.right_sibling);
+                locks[res.right_sibling].WriteUnlock();
               }
               auto x = res.datas[0];
               if (last_pos) {
@@ -639,6 +724,7 @@ private:
               }
               res.now_size--;
               mydatabase.write(res, pos);
+              locks[pos].WriteUnlock();
               return true;
             }
             if (i != (res.now_size - 1)) {
@@ -648,9 +734,10 @@ private:
             res.now_size--;
             if (last_pos == 0) {
               mydatabase.write(res, pos);
+              locks[pos].WriteUnlock();
               return true;
             }
-            if (res.now_size < ((size >> 2) - 1)) {
+            if (res.now_size < ((size >> 1) - 1)) {
               if ((where == 0) &&
                   (how_many == 1)) { // 说明这个节点没有办法进行调整。
                 if (i == res.now_size) {
@@ -664,18 +751,21 @@ private:
                       parent.datas[i] = to_update;
                       mydatabase.write(parent, last_pos);
                       mydatabase.write(res, pos);
+                      locks[pos].WriteUnlock();
                       return true;
                     }
                   }
                 }
                 mydatabase.write(res, pos);
+                locks[pos].WriteUnlock();
                 return true;
               }
               if (where != (how_many - 1)) {
                 int right;
                 right = res.right_sibling;
                 Node right_s;
-                mydatabase.read(right_s, res.right_sibling); // 读入右儿子。
+                locks[right].WriteLock();
+                mydatabase.read(right_s, res.right_sibling); // 读入右兄弟。
                 if (right_s.now_size >= (size >> 1)) {
                   auto to_update = res.datas[res.now_size];
                   res.datas[res.now_size] = right_s.datas[0];
@@ -685,6 +775,7 @@ private:
                                (right_s.now_size - 1) * sizeof(MyData));
                   right_s.now_size--;
                   mydatabase.write(right_s, right_s.pos);
+                  locks[res.right_sibling].WriteUnlock();
                   Node parent;
                   mydatabase.read(parent, last_pos);
                   for (int i = 0; i < parent.now_size; i++) {
@@ -693,6 +784,7 @@ private:
                       to_change.son = parent.datas[i].son;
                       parent.datas[i] = to_change;
                       mydatabase.write(parent, last_pos);
+                      locks[pos].WriteUnlock();
                       return true; // 借块操作完成。右兄弟节点、本身、父节点均得到更新。
                     }
                   }
@@ -725,11 +817,15 @@ private:
                   res.right_sibling = right_s.right_sibling;
                   if (right_s.right_sibling != 0) {
                     Node double_right;
+                    locks[right_s.right_sibling].WriteLock();
                     mydatabase.read(double_right, right_s.right_sibling);
                     double_right.left_sibling = pos;
                     mydatabase.write(double_right, right_s.right_sibling);
+                    locks[right_s.right_sibling].WriteUnlock();
                   }
                   mydatabase.write(res, pos);
+                  locks[right].WriteUnlock();
+                  locks[pos].WriteUnlock();
                   return true;
                 }
               } else {
@@ -749,6 +845,7 @@ private:
                 int left;
                 left = res.left_sibling;
                 Node left_s;
+                locks[left].WriteLock();
                 mydatabase.read(left_s, res.left_sibling); // 读入右儿子。
                 if (left_s.now_size >= (size >> 1)) {
                   std::memmove(&res.datas[1], &res.datas[0],
@@ -760,6 +857,7 @@ private:
                   res.now_size++;
                   mydatabase.write(res, pos);
                   mydatabase.write(left_s, left);
+                  locks[left].WriteUnlock();
                   Node parent;
                   mydatabase.read(parent, last_pos);
                   for (int i = 0; i < parent.now_size; i++) {
@@ -767,6 +865,7 @@ private:
                       to_update.son = parent.datas[i].son;
                       parent.datas[i] = to_update;
                       mydatabase.write(parent, last_pos);
+                      locks[pos].WriteUnlock();
                       return true;
                     }
                   }
@@ -781,9 +880,11 @@ private:
                   mydatabase.write(res, pos);
                   if (left_s.left_sibling != 0) {
                     Node double_left;
+                    locks[left_s.left_sibling].WriteLock();
                     mydatabase.read(double_left, left_s.left_sibling);
                     double_left.right_sibling = pos;
                     mydatabase.write(double_left, left_s.left_sibling);
+                    locks[left_s.left_sibling].WriteUnlock();
                   }
                   auto to_change = res.datas[left_s.now_size - 1];
                   Node parent;
@@ -801,6 +902,8 @@ private:
                     }
                   }
                   mydatabase.write(res, pos);
+                  locks[left].WriteUnlock();
+                  locks[pos].WriteUnlock();
                   return true;
                 }
               }
@@ -820,16 +923,30 @@ private:
                 }
               }
               mydatabase.write(res, pos);
+              locks[pos].WriteUnlock();
               return true;
             }
           }
         } else {
+          locks[res.datas[i].son].WriteLock();
+          Node to_check;
+          mydatabase.read(to_check, res.datas[i].son);
+          locks[res.datas[i].son].WriteUnlock();
+          if (res.datas[i] != to_delete &&
+              (to_check.now_size > (size / 2 + 3))) {
+            locks[pos].WriteUnlock();
+            bool ans =
+                NodeErase(res.datas[i].son, pos, to_delete, i, res.now_size);
+            return ans;
+          }//说明不可能产生影响。
           bool ans =
               NodeErase(res.datas[i].son, pos, to_delete, i, res.now_size);
           if (ans == false) {
+            locks[pos].WriteUnlock();
             return false;
           }
           if (last_pos == 0) {
+            locks[pos].WriteUnlock();
             return true;
           }
           mydatabase.read(res, pos);
@@ -837,15 +954,19 @@ private:
             recycle.push_back(res.pos);
             if (res.left_sibling != 0) {
               Node left;
+              locks[res.left_sibling].WriteLock();
               mydatabase.read(left, res.left_sibling);
               left.right_sibling = res.right_sibling;
               mydatabase.write(left, res.left_sibling);
+              locks[res.left_sibling].WriteUnlock();
             }
             if (res.right_sibling != 0) {
               Node right;
+              locks[res.right_sibling].WriteLock();
               mydatabase.read(right, res.right_sibling);
               right.left_sibling = res.left_sibling;
               mydatabase.write(right, res.right_sibling);
+              locks[res.right_sibling].WriteUnlock();
             }
             auto x = res.datas[0];
             if (last_pos) {
@@ -864,6 +985,7 @@ private:
               }
             }
             mydatabase.write(res, pos);
+            locks[pos].WriteUnlock();
             return true;
           }
           if (res.datas[res.now_size - 1] != last_one) { // 应当向上修改。
@@ -879,7 +1001,7 @@ private:
               }
             }
           }
-          if (res.now_size < ((size >>1) - 1)) {
+          if (res.now_size < ((size >> 1) - 1)) {
             if ((where == 0) &&
                 (how_many == 1)) { // 说明这个节点没有办法进行调整。
               if (i == res.now_size) {
@@ -893,17 +1015,20 @@ private:
                     parent.datas[i] = to_update;
                     mydatabase.write(parent, last_pos);
                     mydatabase.write(res, pos);
+                    locks[pos].WriteUnlock();
                     return true;
                   }
                 }
               }
               mydatabase.write(res, pos);
+              locks[pos].WriteUnlock();
               return true;
             }
             if (where != (how_many - 1)) {
               int right;
               right = res.right_sibling;
               Node right_s;
+              locks[right].WriteLock();
               mydatabase.read(right_s, res.right_sibling); // 读入右儿子。
               if (right_s.now_size >= (size >> 1)) {
                 auto to_update = res.datas[res.now_size];
@@ -914,6 +1039,7 @@ private:
                              (right_s.now_size - 1) * sizeof(MyData));
                 right_s.now_size--;
                 mydatabase.write(right_s, right_s.pos);
+                locks[right].WriteUnlock();
                 Node parent;
                 mydatabase.read(parent, last_pos);
                 for (int i = 0; i < parent.now_size; i++) {
@@ -922,6 +1048,7 @@ private:
                     to_change.son = parent.datas[i].son;
                     parent.datas[i] = to_change;
                     mydatabase.write(parent, last_pos);
+                    locks[pos].WriteUnlock();
                     return true; // 借块操作完成。右兄弟节点、本身、父节点均得到更新。
                   }
                 }
@@ -953,11 +1080,15 @@ private:
                 res.right_sibling = right_s.right_sibling;
                 if (right_s.right_sibling != 0) {
                   Node double_right;
+                  locks[right_s.right_sibling].WriteLock();
                   mydatabase.read(double_right, right_s.right_sibling);
                   double_right.left_sibling = pos;
                   mydatabase.write(double_right, right_s.right_sibling);
+                  locks[right_s.right_sibling].WriteUnlock();
                 }
                 mydatabase.write(res, pos);
+                locks[right].WriteUnlock();
+                locks[right].WriteUnlock();
                 return true;
               }
             } else {
@@ -977,7 +1108,8 @@ private:
               int left;
               left = res.left_sibling;
               Node left_s;
-              mydatabase.read(left_s, res.left_sibling); // 读入右儿子。
+              locks[left].WriteLock();
+              mydatabase.read(left_s, res.left_sibling); // 读入左儿子。
               if (left_s.now_size >= (size >> 1)) {
                 std::memmove(&res.datas[1], &res.datas[0],
                              res.now_size * sizeof(MyData));
@@ -988,6 +1120,7 @@ private:
                 res.now_size++;
                 mydatabase.write(res, pos);
                 mydatabase.write(left_s, left);
+                locks[left].WriteUnlock();
                 Node parent;
                 mydatabase.read(parent, last_pos);
                 for (int i = 0; i < parent.now_size; i++) {
@@ -995,6 +1128,7 @@ private:
                     to_update.son = parent.datas[i].son;
                     parent.datas[i] = to_update;
                     mydatabase.write(parent, last_pos);
+                    locks[pos].WriteUnlock();
                     return true;
                   }
                 }
@@ -1008,9 +1142,11 @@ private:
                 mydatabase.write(res, pos);
                 if (left_s.left_sibling != 0) {
                   Node double_left;
+                  locks[left_s.left_sibling].WriteLock();
                   mydatabase.read(double_left, left_s.left_sibling);
                   double_left.right_sibling = pos;
                   mydatabase.write(double_left, left_s.left_sibling);
+                  locks[left_s.left_sibling].WriteUnlock();
                 }
                 auto to_change = res.datas[left_s.now_size - 1];
                 Node parent;
@@ -1027,6 +1163,8 @@ private:
                   }
                 }
                 mydatabase.write(res, pos);
+                locks[left].WriteUnlock();
+                locks[pos].WriteUnlock();
                 return true;
               }
             }
@@ -1046,11 +1184,13 @@ private:
               }
             }
             mydatabase.write(res, pos);
+            locks[pos].WriteUnlock();
             return true;
           }
         }
       }
     }
+    locks[pos].WriteUnlock();
     return false;
   }
 
@@ -1069,6 +1209,9 @@ public:
       int res;
       myrecycle.read(res, i);
       recycle.push_back(res);
+    }
+    for (int i = 0; i <= B_current; i++) {
+      locks.AddLock();
     }
   }
   ~BPT() {
@@ -1095,6 +1238,8 @@ public:
       B_root = 1;
       B_total = 1;
       B_current = 1;
+      locks.clear();
+      locks.AddLock();
     } else {
       int root;
       root = B_root;
@@ -1119,15 +1264,21 @@ public:
     to_find.hash1 = hash_1;
     to_find.hash2 = hash_2;
     to_find.value = minus_max;
+    locks[B_root].ReadLock();
+    int own = B_root;
     mydatabase.read(res, B_root);
     while (res.datas[0].son != 0) {
       for (int i = 0; i < res.now_size; i++) {
         if (to_find < res.datas[i]) {
+          locks[res.datas[i].son].ReadLock();
+          locks[own].ReadUnlock();
+          own = res.datas[i].son;
           mydatabase.read(res, res.datas[i].son);
           break;
         }
         if (i == (res.now_size - 1)) {
           std::cout << "null" << '\n';
+          locks[own].ReadUnlock();
           return;
         }
       }
@@ -1141,6 +1292,7 @@ public:
     }
     if (found == res.now_size) {
       std::cout << "null" << '\n';
+      locks[own].ReadUnlock();
       return;
     }
     while ((hash_1 == res.datas[found].hash1) &&
@@ -1150,13 +1302,18 @@ public:
       if (found == res.now_size) {
         if (res.right_sibling == 0) {
           std::cout << '\n';
+          locks[own].ReadUnlock();
           return;
         }
+        locks[res.right_sibling].ReadLock();
+        locks[own].ReadUnlock();
+        own = res.right_sibling;
         mydatabase.read(res, res.right_sibling);
         found = 0;
       }
     }
     std::cout << '\n';
+    locks[own].ReadUnlock();
     return;
   }
 
@@ -1166,23 +1323,24 @@ public:
     to_delete.hash1 = hash_1;
     to_delete.hash2 = hash_2;
     to_delete.value = value;
+    // std::cout << "ROOT" << B_root << std::endl;
     if (NodeErase(B_root, 0, to_delete, 0, 0) != false) {
       B_total--;
     }
     return;
   }
+  void Check() {
+    for(int i = 0; i < locks.size(); i++) {
+      std::cout << i << ' ';
+      locks[i].CheckStatus();
+    }
+    return;
+  }
 };
-
-int main() {
-  std::ios::sync_with_stdio(false);
-  std::cin.tie(0);
-  std::cout.tie(0);
-  BPT<int> test("database");
-  int n;
-  std::cin >> n;
+BPT<int> test("database");
+void Listen() {
   std::string op;
-  for (int i = 0; i < n; i++) {
-    std::cin >> op;
+   std::cin >> op;
     if (op == "insert") {
       std::string index;
       int value;
@@ -1192,7 +1350,7 @@ int main() {
       hash1 = MyHash(index, exp1);
       hash2 = MyHash(index, exp2);
       test.Insert(hash1, hash2, value);
-      continue;
+      return;
     }
     if (op == "find") {
       std::string index;
@@ -1201,7 +1359,7 @@ int main() {
       hash1 = MyHash(index, exp1);
       hash2 = MyHash(index, exp2);
       test.find(hash1, hash2);
-      continue;
+      return;
     }
     if (op == "delete") {
       std::string index;
@@ -1212,8 +1370,22 @@ int main() {
       hash1 = MyHash(index, exp1);
       hash2 = MyHash(index, exp2);
       test.Erase(hash1, hash2, value);
-      continue;
+      return;
     }
+}
+int main() {
+  std::ios::sync_with_stdio(false);
+  std::cin.tie(0);
+  std::cout.tie(0);
+  // freopen("t.txt", "r", stdin);
+  int n;
+  std::cin >> n;
+  for (int i = 0; i < n; i++) {
+    // std::cout << i << std::endl;
+    std::thread task(Listen);
+    task.join();
   }
+  // std::this_thread::sleep_for(std::chrono::seconds(1));
+  // test.Check();
   return 0;
 }
