@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -1147,7 +1148,7 @@ public:
     }
     while ((hash_1 == res.datas[found].hash1) &&
            (hash_2 == res.datas[found].hash2)) {
-      std::cout << res.datas[found].value << ' ';
+      std::cout << res.datas[found].value << std::endl;
       found++;
       if (found == res.now_size) {
         if (res.right_sibling == 0) {
@@ -1176,10 +1177,13 @@ public:
 };
 
 int main() {
+    auto start = std::chrono::high_resolution_clock::now();
   std::ios::sync_with_stdio(false);
   std::cin.tie(0);
   std::cout.tie(0);
   BPT<int> test("database");
+  freopen("t.txt", "r", stdin);
+  freopen("ans.txt", "w", stdout);
   int n;
   std::cin >> n;
   std::string op;
@@ -1217,5 +1221,8 @@ int main() {
       continue;
     }
   }
+    auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> diff = end - start;
+  std::cout << "Time to execute: " << diff.count() << " s\n";
   return 0;
 }
