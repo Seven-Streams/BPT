@@ -661,12 +661,12 @@ private:
 
 public:
   void ReadLock() {
-    std::shared_lock my_lock(my_mutex);
     auto id = std::this_thread::get_id();
     std::unique_lock protect(protection);
     my_queue.push_back(id);
     protect.unlock();
-    my_cv.wait(my_lock,
+    my_mutex.lock_shared();
+    my_cv.wait(my_mutex,
                [&] { return (!is_writing) && (id == my_queue.front()); });
     protect.lock();
     is_reading++;
@@ -675,12 +675,12 @@ public:
     return;
   }
   void WriteLock() {
-    std::unique_lock my_lock(my_mutex);
     auto id = std::this_thread::get_id();
     std::unique_lock protect(protection);
     my_queue.push_back(id);
     protect.unlock();
-    my_cv.wait(my_lock, [&] {
+    my_mutex.lock();
+    my_cv.wait(my_mutex, [&] {
       return (!is_writing) && (id == my_queue.front()) && (!is_reading);
     });
     protect.lock();
@@ -692,13 +692,17 @@ public:
   void ReadUnlock() {
     std::unique_lock protect(protection);
     is_reading--;
+    my_mutex.unlock_shared();
     my_cv.notify_all();
+    protect.unlock();
     return;
   }
   void WriteUnlock() {
     std::unique_lock protect(protection);
     is_writing = false;
+    my_mutex.unlock();
     my_cv.notify_all();
+    protect.unlock();
     return;
   }
   void CheckStatus() {
@@ -870,9 +874,11 @@ private:
       mycache.pop_back();
       mydatabase.write(the_back, the_back.pos);
     }
+    // Node res;
+    // mydatabase.read(res, pos);
     return res;
   }
-  void WritewithCache(const Node &to_write) {
+  void WritewithCache(Node to_write) {
     std::unique_lock guard(cache_lock);
     for (auto it = mycache.begin(); it != mycache.end(); it++) {
       if (it->pos == to_write.pos) {
@@ -887,9 +893,11 @@ private:
       mycache.pop_back();
       mydatabase.write(the_back, the_back.pos);
     }
+    // mydatabase.write(to_write, to_write.pos);
     return;
   }
   void ReMoveFromCache(int pos) {
+    std::unique_lock guard(cache_lock);
     for (auto it = mycache.begin(); it != mycache.end(); it++) {
       if (it->pos == pos) {
         mycache.erase(it);
@@ -901,10 +909,11 @@ private:
   void NodeInsert(const MyData &to_insert, const int &pos, const int &last_node,
                   const Node &last_parent) {
     locks[pos]->WriteLock();
+    // std::cout << "OK" << pos << std::endl;
     Node res;
     res = ReadwithCache(pos);
     if (last_node == 0) {
-      if (res.now_size > (size - 10) || res.now_size < 10) {
+      if (res.now_size > (size - 10) || (B_total < 10)) {
         root_safe = false;
       } else {
         root_safe = true;
@@ -955,13 +964,12 @@ private:
     res = ReadwithCache(pos);
     int now_size = res.now_size;
     int half = now_size >> 1;
-    std::memmove(&new_node.datas[0], &res.datas[0], half * sizeof(MyData));
-    std::memmove(&res.datas[0], &res.datas[half],
+    std::memmove(&new_node.datas[0], &res.datas[half],
                  (now_size - half) * sizeof(MyData));
-    res.now_size = (now_size - half);
-    new_node.now_size = half;
-    new_node.left_sibling = res.left_sibling;
-    new_node.right_sibling = res.pos;
+    res.now_size = half;
+    new_node.now_size = now_size - half;
+    new_node.right_sibling = res.right_sibling;
+    new_node.left_sibling = res.pos;
     if (recycle.empty()) {
       B_current++;
       new_node.pos = B_current; // 至此，所有新节点已经准备完毕。
@@ -973,18 +981,31 @@ private:
       new_node.pos = recycle.back();
       recycle.pop_back();
     }
-    res.left_sibling = new_node.pos;
+    res.right_sibling = new_node.pos;
     Node res1;
-    locks[new_node.left_sibling]->WriteLock();
-    res1 = ReadwithCache(new_node.left_sibling);
-    res1.right_sibling = new_node.pos;
+    locks[new_node.right_sibling]->WriteLock();
+    res1 = ReadwithCache(new_node.right_sibling);
+    res1.left_sibling = new_node.pos;
     WritewithCache(res1);
     locks[res1.pos]->WriteUnlock();
-    MyData index;
-    index = new_node.datas[half - 1];
-    index.son = new_node.pos;
+    // update_to_here
+    MyData index1, index2;
+    index1 = res.datas[half - 1];
+    index2 = new_node.datas[new_node.now_size - 1];
+    index1.son = res.pos;
+    index2.son = new_node.pos;
     if (last_node) {
-      OnlyInsert(last_node, index, parent);
+      for (int i = 0; i < parent.now_size; i++) {
+        if (parent.datas[i] == index2) {
+          memmove(&parent.datas[i + 1], &parent.datas[i],
+                  (parent.now_size - i) * sizeof(MyData));
+          parent.datas[i] = index1;
+          parent.datas[i + 1] = index2;
+          parent.now_size++;
+          WritewithCache(parent);
+          break;
+        }
+      }
     } else {
       int current;
       if (recycle.empty()) {
@@ -1004,29 +1025,13 @@ private:
       new_alloc.left_sibling = 0;
       new_alloc.right_sibling = 0;
       new_alloc.pos = current;
-      new_alloc.datas[1] = res.datas[now_size - half - 1];
-      new_alloc.datas[1].son = res.pos;
-      new_alloc.datas[0] = index;
+      new_alloc.datas[1] = index2;
+      new_alloc.datas[0] = index1;
       WritewithCache(new_alloc);
       B_root = current;
     }
     WritewithCache(res);
     WritewithCache(new_node);
-    return;
-  }
-  void OnlyInsert(const int &pos, const MyData &to_insert, const Node &parent) {
-    Node res = parent;
-    int find = 0;
-    for (find = 0; find < res.now_size; find++) {
-      if (res.datas[find] > to_insert) {
-        break;
-      }
-    }
-    std::memmove(&res.datas[find + 1], &res.datas[find],
-                 (res.now_size - find) * sizeof(MyData));
-    res.datas[find] = to_insert;
-    res.now_size++;
-    WritewithCache(res);
     return;
   }
   bool NodeErase(const int &pos, const int &last_pos, MyData to_delete,
@@ -1038,7 +1043,7 @@ private:
     Node res;
     res = ReadwithCache(pos);
     if (last_pos == 0) {
-      if (res.now_size > (size - 10) || res.now_size < 10) {
+      if (res.now_size > (size - 10) || B_total < 10) {
         root_safe = false;
       } else {
         root_safe = true;
@@ -1054,6 +1059,7 @@ private:
             return false; // didn't find~
           } else {
             if (res.now_size == 1) { // 说明删空了。
+              ReMoveFromCache(res.pos);
               recycle.push_back(res.pos);
               if (res.left_sibling != 0) {
                 Node left;
@@ -1153,6 +1159,8 @@ private:
                     }
                   }
                 } else { // 说明旁边的节点数目数目已经足够少。
+                  recycle.push_back(right);
+                  ReMoveFromCache(right);
                   auto to_change = res.datas[res.now_size];
                   std::memmove(&res.datas[res.now_size], &right_s.datas[0],
                                right_s.now_size * sizeof(MyData));
@@ -1316,6 +1324,7 @@ private:
           }
           res = ReadwithCache(pos);
           if (res.now_size == 0) { // 说明删空了。
+            ReMoveFromCache(res.pos);
             recycle.push_back(res.pos);
             if (res.left_sibling != 0) {
               Node left;
@@ -1418,6 +1427,8 @@ private:
                   }
                 }
               } else { // 说明旁边的节点数目数目已经足够少。
+                recycle.push_back(right);
+                ReMoveFromCache(right);
                 auto to_change = res.datas[res.now_size];
                 std::memmove(&res.datas[res.now_size], &right_s.datas[0],
                              right_s.now_size * sizeof(MyData));
@@ -1638,76 +1649,78 @@ public:
       NodeInsert(res, B_root, 0, nothing);
       B_total++;
     }
+    // locks[1]->CheckStatus();
     return;
   }
   void find(const unsigned long long &hash_1,
             const unsigned long long &hash_2) {
-    if(!root_safe) {
+    if (!root_safe) {
       root_protection.WriteLock();
-          if (B_total == 0) {
-      std::cout << "null" << '\n';
-      return;
-      root_protection.WriteUnlock();
-    }
-    Node res;
-    MyData to_find;
-    to_find.hash1 = hash_1;
-    to_find.hash2 = hash_2;
-    to_find.value = minus_max;
-    int own = B_root;
-    res = ReadwithCache(B_root);
-    while (res.datas[0].son != 0) {
-      for (int i = 0; i < res.now_size; i++) {
-        if (to_find < res.datas[i]) {
-          locks[res.datas[i].son]->ReadLock();
-          locks[own]->ReadUnlock();
-          own = res.datas[i].son;
-          res = ReadwithCache(own);
+      if (B_total == 0) {
+        std::cout << "null" << '\n';
+        root_protection.WriteUnlock();
+        return;
+      }
+      Node res;
+      MyData to_find;
+      to_find.hash1 = hash_1;
+      to_find.hash2 = hash_2;
+      to_find.value = minus_max;
+      int own = B_root;
+      locks[B_root]->ReadLock();
+      res = ReadwithCache(B_root);
+      while (res.datas[0].son != 0) {
+        for (int i = 0; i < res.now_size; i++) {
+          if (to_find < res.datas[i]) {
+            locks[res.datas[i].son]->ReadLock();
+            locks[own]->ReadUnlock();
+            own = res.datas[i].son;
+            res = ReadwithCache(own);
+            break;
+          }
+          if (i == (res.now_size - 1)) {
+            std::cout << "null" << '\n';
+            locks[own]->ReadUnlock();
+            root_protection.WriteUnlock();
+            return;
+          }
+        }
+      }
+      int found = 0;
+      for (found = 0; found < res.now_size; found++) {
+        if ((hash_1 == res.datas[found].hash1) &&
+            (hash_2 == res.datas[found].hash2)) {
           break;
         }
-        if (i == (res.now_size - 1)) {
-          std::cout << "null" << '\n';
+      }
+      if (found == res.now_size) {
+        std::cout << "null" << '\n';
+        locks[own]->ReadUnlock();
+        root_protection.WriteUnlock();
+        return;
+      }
+      while ((hash_1 == res.datas[found].hash1) &&
+             (hash_2 == res.datas[found].hash2)) {
+        std::cout << res.datas[found].value << std::endl;
+        found++;
+        if (found == res.now_size) {
+          if (res.right_sibling == 0) {
+            std::cout << '\n';
+            locks[own]->ReadUnlock();
+            root_protection.WriteUnlock();
+            return;
+          }
+          locks[res.right_sibling]->ReadLock();
           locks[own]->ReadUnlock();
-          root_protection.WriteUnlock();
-          return;
+          own = res.right_sibling;
+          res = ReadwithCache(own);
+          found = 0;
         }
       }
-    }
-    int found = 0;
-    for (found = 0; found < res.now_size; found++) {
-      if ((hash_1 == res.datas[found].hash1) &&
-          (hash_2 == res.datas[found].hash2)) {
-        break;
-      }
-    }
-    if (found == res.now_size) {
-      std::cout << "null" << '\n';
+      std::cout << '\n';
       locks[own]->ReadUnlock();
       root_protection.WriteUnlock();
       return;
-    }
-    while ((hash_1 == res.datas[found].hash1) &&
-           (hash_2 == res.datas[found].hash2)) {
-      std::cout << res.datas[found].value << std::endl;
-      found++;
-      if (found == res.now_size) {
-        if (res.right_sibling == 0) {
-          std::cout << '\n';
-          locks[own]->ReadUnlock();
-          root_protection.WriteUnlock();
-          return;
-        }
-        locks[res.right_sibling]->ReadLock();
-        locks[own]->ReadUnlock();
-        own = res.right_sibling;
-        res = ReadwithCache(own);
-        found = 0;
-      }
-    }
-    std::cout << '\n';
-    locks[own]->ReadUnlock();
-    root_protection.WriteUnlock();
-    return;
     }
     if (B_total == 0) {
       std::cout << "null" << '\n';
@@ -1719,6 +1732,7 @@ public:
     to_find.hash2 = hash_2;
     to_find.value = minus_max;
     int own = B_root;
+          locks[B_root]->ReadLock();
     res = ReadwithCache(B_root);
     while (res.datas[0].son != 0) {
       for (int i = 0; i < res.now_size; i++) {
@@ -1777,13 +1791,13 @@ public:
     to_delete.hash2 = hash_2;
     to_delete.value = value;
     // std::cout << "ROOT" << B_root << std::endl;
-    if(!root_safe) {
+    if (!root_safe) {
       root_protection.WriteLock();
-          if (NodeErase(B_root, 0, to_delete, 0, 0) != false) {
-      B_total--;
-      root_protection.WriteUnlock();
-      return;
-    }
+      if (NodeErase(B_root, 0, to_delete, 0, 0) != false) {
+        B_total--;
+        root_protection.WriteUnlock();
+        return;
+      }
     }
     if (NodeErase(B_root, 0, to_delete, 0, 0) != false) {
       B_total--;
@@ -1816,7 +1830,7 @@ std::string ProcessTxt(std::string &txt) {
   return tmp;
 }
 BPT<int> test("database");
-void Listen(std::string txt) {
+void Listen(std::string txt, int number) {
   std::string op;
   op = ProcessTxt(txt);
   if (op == "insert") {
@@ -1862,25 +1876,25 @@ int main() {
   std::getline(std::cin, res);
   int n;
   n = std::stoi(res);
-  for (int i = 1; i <= (n / 8); i++) {
+  for (int i = 0; i < (n / 8); i++) {
     std::cout << i << std::endl;
     std::string command;
     std::getline(std::cin, command);
-    std::thread task1(Listen, command);
+    std::thread task1(Listen, command, 8 * i + 1);
     std::getline(std::cin, command);
-    std::thread task2(Listen, command);
+    std::thread task2(Listen, command, 8 * i + 2);
     std::getline(std::cin, command);
-    std::thread task3(Listen, command);
+    std::thread task3(Listen, command, 8 * i + 3);
     std::getline(std::cin, command);
-    std::thread task4(Listen, command);
+    std::thread task4(Listen, command, 8 * i + 4);
     std::getline(std::cin, command);
-    std::thread task5(Listen, command);
+    std::thread task5(Listen, command, 8 * i + 5);
     std::getline(std::cin, command);
-    std::thread task6(Listen, command);
+    std::thread task6(Listen, command, 8 * i + 6);
     std::getline(std::cin, command);
-    std::thread task7(Listen, command);
+    std::thread task7(Listen, command, 8 * i + 7);
     std::getline(std::cin, command);
-    std::thread task8(Listen, command);
+    std::thread task8(Listen, command, 8 * i + 8);
     task1.join();
     task2.join();
     task3.join();
