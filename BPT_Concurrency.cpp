@@ -797,7 +797,7 @@ inline unsigned long long MyHash(const std::string &txt,
   }
   return ans;
 }
-template <class Value = int, int size = 550> class BPT {
+template <class Value = int, int size = 550, int cachesize = 20> class BPT {
 private:
   std::mutex change_locks;
   sjtu::vector<int> recycle;
@@ -846,13 +846,61 @@ private:
     int now_size = 0;
     int pos = 0;
   } nothing;
+  std::mutex cache_lock;
+  sjtu::list<Node> mycache;
   MemoryRiver<Node, 3> mydatabase;
   MemoryRiver<int, 1> myrecycle;
+  Node ReadwithCache(int pos) {
+    std::unique_lock guard(cache_lock);
+    for (auto it = mycache.begin(); it != mycache.end(); it++) {
+      if (it->pos == pos) {
+        Node res = *it;
+        mycache.erase(it);
+        mycache.push_front(res);
+        return res;
+      }
+    }
+    Node res;
+    mydatabase.read(res, pos);
+    mycache.push_front(res);
+    if (mycache.size() > cachesize) {
+      Node the_back = mycache.back();
+      mycache.pop_back();
+      mydatabase.write(the_back, the_back.pos);
+    }
+    return res;
+  }
+  void WritewithCache(const Node &to_write) {
+    std::unique_lock guard(cache_lock);
+    for (auto it = mycache.begin(); it != mycache.end(); it++) {
+      if (it->pos == to_write.pos) {
+        mycache.erase(it);
+        mycache.push_front(to_write);
+        return;
+      }
+    }
+    mycache.push_front(to_write);
+    if (mycache.size() > cachesize) {
+      Node the_back = mycache.back();
+      mycache.pop_back();
+      mydatabase.write(the_back, the_back.pos);
+    }
+    return;
+  }
+  void ReMoveFromCache(int pos) {
+    for (auto it = mycache.begin(); it != mycache.end(); it++) {
+      if (it->pos == pos) {
+        mycache.erase(it);
+        break;
+      }
+    }
+    return;
+  }
   void NodeInsert(const MyData &to_insert, const int &pos, const int &last_node,
                   const Node &last_parent) {
     locks[pos]->WriteLock();
     Node res;
-    mydatabase.read(res, pos);
+    res = ReadwithCache(pos);
     int find = 0;
     for (find = 0; find < res.now_size; find++) {
       if (res.datas[find] > to_insert) {
@@ -866,18 +914,18 @@ private:
       }
       res.datas[find] = to_insert;
       res.now_size++;
-      mydatabase.write(res, pos);
+      WritewithCache(res);
     } else {
       if (find == (res.now_size)) {
         find--;
         auto x = to_insert;
         x.son = res.datas[find].son;
         res.datas[find] = x;
-        mydatabase.write(res, pos);
+        WritewithCache(res);
       }
       Node to_check;
       locks[res.datas[find].son]->WriteLock();
-      mydatabase.read(to_check, res.datas[find].son);
+      to_check = ReadwithCache(res.datas[find].son);
       locks[res.datas[find].son]->WriteUnlock();
       if (to_check.now_size < (size - 5)) {
         locks[pos]->WriteUnlock();
@@ -895,7 +943,7 @@ private:
   void Split(const int &pos, const int &last_node, Node parent) {
     Node res;
     Node new_node;
-    mydatabase.read(res, pos);
+    res = ReadwithCache(pos);
     int now_size = res.now_size;
     int half = now_size >> 1;
     std::memmove(&new_node.datas[0], &res.datas[0], half * sizeof(MyData));
@@ -919,9 +967,9 @@ private:
     res.left_sibling = new_node.pos;
     Node res1;
     locks[new_node.left_sibling]->WriteLock();
-    mydatabase.read(res1, new_node.left_sibling);
+    res1 = ReadwithCache(new_node.left_sibling);
     res1.right_sibling = new_node.pos;
-    mydatabase.write(res1, res1.pos);
+    WritewithCache(res1);
     locks[res1.pos]->WriteUnlock();
     MyData index;
     index = new_node.datas[half - 1];
@@ -950,11 +998,11 @@ private:
       new_alloc.datas[1] = res.datas[now_size - half - 1];
       new_alloc.datas[1].son = res.pos;
       new_alloc.datas[0] = index;
-      mydatabase.write(new_alloc, current);
+      WritewithCache(new_alloc);
       B_root = current;
     }
-    mydatabase.write(res, res.pos);
-    mydatabase.write(new_node, new_node.pos);
+    WritewithCache(res);
+    WritewithCache(new_node);
     return;
   }
   void OnlyInsert(const int &pos, const MyData &to_insert, const Node &parent) {
@@ -969,7 +1017,7 @@ private:
                  (res.now_size - find) * sizeof(MyData));
     res.datas[find] = to_insert;
     res.now_size++;
-    mydatabase.write(res, pos);
+    WritewithCache(res);
     return;
   }
   bool NodeErase(const int &pos, const int &last_pos, MyData to_delete,
@@ -979,7 +1027,7 @@ private:
     locks[pos]->WriteLock();
     // std::cout << to_delete.value << std::endl;
     Node res;
-    mydatabase.read(res, pos);
+    res = ReadwithCache(pos);
     int found = 0;
     auto last_one = res.datas[res.now_size - 1];
     for (int i = 0; i < res.now_size; i++) {
@@ -994,23 +1042,23 @@ private:
               if (res.left_sibling != 0) {
                 Node left;
                 locks[res.left_sibling]->WriteLock();
-                mydatabase.read(left, res.left_sibling);
+                left = ReadwithCache(res.left_sibling);
                 left.right_sibling = res.right_sibling;
-                mydatabase.write(left, res.left_sibling);
+                WritewithCache(left);
                 locks[res.left_sibling]->WriteUnlock();
               }
               if (res.right_sibling != 0) {
                 Node right;
                 locks[res.right_sibling]->WriteLock();
-                mydatabase.read(right, res.right_sibling);
+                right = ReadwithCache(res.right_sibling);
                 right.left_sibling = res.left_sibling;
-                mydatabase.write(right, res.right_sibling);
+                WritewithCache(right);
                 locks[res.right_sibling]->WriteUnlock();
               }
               auto x = res.datas[0];
               if (last_pos) {
                 Node parent;
-                mydatabase.read(parent, last_pos);
+                parent = ReadwithCache(last_pos);
                 for (int i = 0; i < parent.now_size; i++) {
                   if (parent.datas[i] == x) {
                     if (i != (parent.now_size - 1)) {
@@ -1018,12 +1066,12 @@ private:
                                    (parent.now_size - i - 1) * sizeof(MyData));
                     }
                     parent.now_size--;
-                    mydatabase.write(parent, last_pos);
+                    WritewithCache(parent);
                   }
                 }
               }
               res.now_size--;
-              mydatabase.write(res, pos);
+              WritewithCache(res);
               locks[pos]->WriteUnlock();
               return true;
             }
@@ -1033,7 +1081,7 @@ private:
             }
             res.now_size--;
             if (last_pos == 0) {
-              mydatabase.write(res, pos);
+              WritewithCache(res);
               locks[pos]->WriteUnlock();
               return true;
             }
@@ -1042,7 +1090,7 @@ private:
                   (how_many == 1)) { // 说明这个节点没有办法进行调整。
                 if (i == res.now_size) {
                   Node parent;
-                  mydatabase.read(parent, last_pos);
+                  parent = ReadwithCache(last_pos);
                   auto to_change = res.datas[res.now_size];
                   auto to_update = res.datas[res.now_size - 1];
                   for (int i = 0; i < parent.now_size; i++) {
@@ -1528,9 +1576,12 @@ public:
     for (int i = 0; i < recycle.size(); i++) {
       myrecycle.write(recycle[i], i + 1);
     }
-    // for(int i = 0; i < locks.size(); i++) {
-    //   delete locks[i];
-    // }
+    for (int i = 0; i < locks.size(); i++) {
+      delete locks[i];
+    }
+    for (auto it = mycache.begin(); it != mycache.end(); it++) {
+      mydatabase.write(*it, it->pos);
+    }
   }
   void Insert(const unsigned long long &hash1, unsigned long long hash2,
               const int &value) {
@@ -1551,7 +1602,7 @@ public:
         res1.datas[0].value = value;
         res1.now_size = 1;
         res1.pos = 1;
-        mydatabase.write(res1, 1);
+        WritewithCache(res1);
         locks[1]->WriteUnlock();
         return;
       }
