@@ -1642,49 +1642,47 @@ void Listen(std::string txt, int number) {
   }
 }
 int main() {
-  // auto start = std::chrono::high_resolution_clock::now();
   std::ios::sync_with_stdio(false);
   std::cin.tie(0);
   std::cout.tie(0);
-  // freopen("t.txt", "r", stdin);
-  // freopen("out.txt", "w", stdout);
+  auto start = std::chrono::high_resolution_clock::now();
+  freopen("t.txt", "r", stdin);
   std::string res;
   std::getline(std::cin, res);
   int n;
   n = std::stoi(res);
-  for (int i = 0; i < n; i++) {
+  for (int i = 0; i < n / 8; i++) {
     // std::cout << i << std::endl;
     std::string command;
     std::getline(std::cin, command);
     Listen(command, 1);
-    // std::thread task1(Listen, command, 8 * i + 1);
-    // std::getline(std::cin, command);
-    // std::thread task2(Listen, command, 8 * i + 2);
-    // std::getline(std::cin, command);
-    // std::thread task3(Listen, command, 8 * i + 3);
-    // std::getline(std::cin, command);
-    // std::thread task4(Listen, command, 8 * i + 4);
-    // std::getline(std::cin, command);
-    // std::thread task5(Listen, command, 8 * i + 5);
-    // std::getline(std::cin, command);
-    // std::thread task6(Listen, command, 8 * i + 6);
-    // std::getline(std::cin, command);
-    // std::thread task7(Listen, command, 8 * i + 7);
-    // std::getline(std::cin, command);
-    // std::thread task8(Listen, command, 8 * i + 8);
-    // task1.join();
-    // task2.join();
-    // task3.join();
-    // task4.join();
-    // task5.join();
-    // task6.join();
-    // task7.join();
-    // task8.join();
+    std::thread task1(Listen, command, 8 * i + 1);
+    std::getline(std::cin, command);
+    std::thread task2(Listen, command, 8 * i + 2);
+    std::getline(std::cin, command);
+    std::thread task3(Listen, command, 8 * i + 3);
+    std::getline(std::cin, command);
+    std::thread task4(Listen, command, 8 * i + 4);
+    std::getline(std::cin, command);
+    std::thread task5(Listen, command, 8 * i + 5);
+    std::getline(std::cin, command);
+    std::thread task6(Listen, command, 8 * i + 6);
+    std::getline(std::cin, command);
+    std::thread task7(Listen, command, 8 * i + 7);
+    std::getline(std::cin, command);
+    std::thread task8(Listen, command, 8 * i + 8);
+    task1.join();
+    task2.join();
+    task3.join();
+    task4.join();
+    task5.join();
+    task6.join();
+    task7.join();
+    task8.join();
   }
-  // std::this_thread::sleep_for(std::chrono::seconds(1));
-  // test.Check();
-  // auto end = std::chrono::high_resolution_clock::now();
-  // std::chrono::duration<double> diff = end - start;
-  // std::cout << "Time to execute: " << diff.count() << " s\n";
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> diff = end - start;
+  std::cout << "Time to execute: " << diff.count() << " s\n";
   return 0;
 }

@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <thread>
 const unsigned long long exp1 = 13331, exp2 = 131;
 const int minus_max = -2147483648;
 const int maxn = 2147483647;
@@ -1096,6 +1097,7 @@ private:
                     }
                   }
                 } else { // 说明旁边的节点数目数目已经足够少。
+                  recycle.push_back(left);
                   // std::cout << "CHECK IT" << to_delete.value <<  std::endl;
                   std::memmove(&res.datas[left_s.now_size], &res.datas[0],
                                res.now_size * sizeof(MyData));
@@ -1284,7 +1286,6 @@ private:
                   WritewithCache(double_right, right_s.right_sibling);
                 }
                 WritewithCache(res, pos);
-                recycle.push_back(right);
                 return true;
               }
             } else {
@@ -1407,7 +1408,7 @@ public:
     for (int i = 0; i < recycle.size(); i++) {
       myrecycle.write(recycle[i], i + 1);
     }
-    for(auto it = mycache.begin(); it != mycache.end(); it++) {
+    for (auto it = mycache.begin(); it != mycache.end(); it++) {
       mydatabase.write(*it, it->pos);
     }
     return;
@@ -1509,6 +1510,8 @@ int main() {
   std::ios::sync_with_stdio(false);
   std::cin.tie(0);
   std::cout.tie(0);
+  // auto start = std::chrono::high_resolution_clock::now();
+  // freopen("t.txt", "r", stdin);
   BPT<int> test("database");
   int n;
   std::cin >> n;
@@ -1547,5 +1550,9 @@ int main() {
       continue;
     }
   }
+  // std::this_thread::sleep_for(std::chrono::seconds(1));
+  // auto end = std::chrono::high_resolution_clock::now();
+  // std::chrono::duration<double> diff = end - start;
+  // std::cout << "Time to execute: " << diff.count() << " s\n";
   return 0;
 }
