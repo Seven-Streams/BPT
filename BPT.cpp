@@ -619,7 +619,7 @@ public:
     delete (this->array)[ind];
     std::memmove(array + ind, array + ind + 1, sizeof(T *) * (total - ind - 1));
     total--;
-    if (total <= (array_size / 4)) {
+    if (total <= (array_size >> 2)) {
       ShrinkArray();
     }
     return iterator(ind, this);
@@ -637,7 +637,7 @@ public:
       throw(3);
     }
     total--;
-    if (total <= (array_size / 4)) {
+    if (total <= (array_size >> 2)) {
       ShrinkArray();
     }
     return;
@@ -682,7 +682,7 @@ public:
     if (n > info_len)
       return;
     file.open(file_name);
-    file.seekg((n - 1) * sizeof(int));
+    file.seekg((n - 1) << 2);
     file.read(reinterpret_cast<char *>(&tmp), sizeof(int));
     file.close();
     return;
@@ -693,7 +693,7 @@ public:
     if (n > info_len)
       return;
     file.open(file_name);
-    file.seekp((n - 1) * sizeof(int), std::fstream::beg);
+    file.seekp((n - 1) << 2, std::fstream::beg);
     file.write(reinterpret_cast<char *>(&tmp), sizeof(int));
     file.close();
     return;
@@ -703,7 +703,7 @@ public:
   // 位置索引意味着当输入正确的位置索引index，在以下三个函数中都能顺利的找到目标对象进行操作
   // 位置索引index可以取为对象写入的起始位置,1base
   void write(W &t, int which_node, int size = 1) {
-    int place = info_len * 4;
+    int place = info_len << 2;
     place += (which_node - 1) * sizeofT;
     file.open(file_name);
     file.seekp(place);
@@ -730,7 +730,7 @@ inline unsigned long long MyHash(const std::string &txt,
   }
   return ans;
 }
-template <class Value = int, int size = 150, int cachesize = 50> class BPT {
+template <class Value = int, int size = 100, int cachesize = 10000> class BPT {
 private:
   struct MyData {
     unsigned long long hash1 = 0;

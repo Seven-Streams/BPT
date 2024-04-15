@@ -846,6 +846,7 @@ private:
   } nothing;
   std::mutex change_locks;
   sjtu::vector<int> recycle;
+  sjtu::ReadWriteLock recycle_protection;
   std::atomic_int B_total = 0;
   std::atomic_int B_root = 0;
   std::atomic_int B_current = 0;
@@ -878,7 +879,7 @@ private:
     // mydatabase.read(res, pos);
     return res;
   }
-  void WritewithCache(Node to_write) {
+  void WritewithCache(const Node &to_write) {
     std::unique_lock guard(cache_lock);
     for (auto it = mycache.begin(); it != mycache.end(); it++) {
       if (it->pos == to_write.pos) {
@@ -896,7 +897,7 @@ private:
     // mydatabase.write(to_write, to_write.pos);
     return;
   }
-  void ReMoveFromCache(int pos) {
+  void ReMoveFromCache(const int &pos) {
     std::unique_lock guard(cache_lock);
     for (auto it = mycache.begin(); it != mycache.end(); it++) {
       if (it->pos == pos) {
@@ -913,7 +914,8 @@ private:
     Node res;
     res = ReadwithCache(pos);
     if (last_node == 0) {
-      if (res.now_size > (size - 10) || (B_total < 10)) {
+      if (((res.now_size > (size - 10)) && B_total < size) || (B_total < 10) ||
+          (res.now_size == size) || (res.now_size == 1)) {
         root_safe = false;
       } else {
         root_safe = true;
@@ -970,6 +972,7 @@ private:
     new_node.now_size = now_size - half;
     new_node.right_sibling = res.right_sibling;
     new_node.left_sibling = res.pos;
+    recycle_protection.WriteLock();
     if (recycle.empty()) {
       B_current++;
       new_node.pos = B_current; // 至此，所有新节点已经准备完毕。
@@ -981,6 +984,7 @@ private:
       new_node.pos = recycle.back();
       recycle.pop_back();
     }
+    recycle_protection.WriteUnlock();
     res.right_sibling = new_node.pos;
     Node res1;
     locks[new_node.right_sibling]->WriteLock();
@@ -1008,6 +1012,7 @@ private:
       }
     } else {
       int current;
+      recycle_protection.WriteLock();
       if (recycle.empty()) {
         current = B_current;
         current++;
@@ -1020,6 +1025,7 @@ private:
         current = recycle.back();
         recycle.pop_back();
       }
+      recycle_protection.WriteUnlock();
       Node new_alloc;
       new_alloc.now_size = 2;
       new_alloc.left_sibling = 0;
@@ -1043,7 +1049,8 @@ private:
     Node res;
     res = ReadwithCache(pos);
     if (last_pos == 0) {
-      if ((res.now_size > (size - 10)) || B_total < 10) {
+      if (((res.now_size > (size - 10)) && B_total < size) || (B_total < 10) ||
+          (res.now_size == size) || (res.now_size == 1)) {
         root_safe = false;
       } else {
         root_safe = true;
@@ -1060,7 +1067,9 @@ private:
           } else {
             if (res.now_size == 1) { // 说明删空了。
               ReMoveFromCache(res.pos);
+              recycle_protection.WriteLock();
               recycle.push_back(res.pos);
+              recycle_protection.WriteUnlock();
               if (res.left_sibling != 0) {
                 Node left;
                 locks[res.left_sibling]->WriteLock();
@@ -1159,7 +1168,9 @@ private:
                     }
                   }
                 } else { // 说明旁边的节点数目数目已经足够少。
+                  recycle_protection.WriteLock();
                   recycle.push_back(right);
+                  recycle_protection.WriteUnlock();
                   ReMoveFromCache(right);
                   auto to_change = res.datas[res.now_size];
                   std::memmove(&res.datas[res.now_size], &right_s.datas[0],
@@ -1246,7 +1257,9 @@ private:
           res = ReadwithCache(pos);
           if (res.now_size == 0) { // 说明删空了。
             ReMoveFromCache(res.pos);
+            recycle_protection.WriteLock();
             recycle.push_back(res.pos);
+            recycle_protection.WriteUnlock();
             if (res.left_sibling != 0) {
               Node left;
               locks[res.left_sibling]->WriteLock();
@@ -1348,7 +1361,9 @@ private:
                   }
                 }
               } else { // 说明旁边的节点数目数目已经足够少。
+                recycle_protection.WriteLock();
                 recycle.push_back(right);
+                recycle_protection.WriteUnlock();
                 ReMoveFromCache(right);
                 auto to_change = res.datas[res.now_size];
                 std::memmove(&res.datas[res.now_size], &right_s.datas[0],
@@ -1498,6 +1513,7 @@ public:
   }
   void find(const unsigned long long &hash_1,
             const unsigned long long &hash_2) {
+    sjtu::list<int> over_claim;
     if (B_total == 0) {
       std::cout << "null" << '\n';
       return;
@@ -1513,6 +1529,13 @@ public:
     while (res.datas[0].son != 0) {
       for (int i = 0; i < res.now_size; i++) {
         if (to_find < res.datas[i]) {
+          for (int j = i + 1; j < res.now_size; j++) {
+            if (to_find > res.datas[j]) {
+              break;
+            }
+            locks[res.datas[j].son]->ReadLock();
+            over_claim.push_back(res.datas[j].son);
+          }
           locks[res.datas[i].son]->ReadLock();
           locks[own]->ReadUnlock();
           own = res.datas[i].son;
@@ -1522,6 +1545,9 @@ public:
         if (i == (res.now_size - 1)) {
           std::cout << "null" << '\n';
           locks[own]->ReadUnlock();
+          while (!over_claim.empty()) {
+            locks[over_claim.front()]->ReadUnlock();
+          }
           return;
         }
       }
@@ -1536,6 +1562,9 @@ public:
     if (found == res.now_size) {
       std::cout << "null" << '\n';
       locks[own]->ReadUnlock();
+      while (!over_claim.empty()) {
+        locks[over_claim.front()]->ReadUnlock();
+      }
       return;
     }
     while ((hash_1 == res.datas[found].hash1) &&
@@ -1546,9 +1575,22 @@ public:
         if (res.right_sibling == 0) {
           std::cout << '\n';
           locks[own]->ReadUnlock();
+          while (!over_claim.empty()) {
+            locks[over_claim.front()]->ReadUnlock();
+          }
           return;
         }
-        locks[res.right_sibling]->ReadLock();
+        bool flag = false;
+        for (auto it = over_claim.begin(); it != over_claim.end(); it++) {
+          if (*it == res.right_sibling) {
+            flag = true;
+            over_claim.erase(it);
+            break;
+          }
+        }
+        if (!flag) {
+          locks[res.right_sibling]->ReadLock();
+        }
         locks[own]->ReadUnlock();
         own = res.right_sibling;
         res = ReadwithCache(own);
@@ -1557,6 +1599,9 @@ public:
     }
     std::cout << '\n';
     locks[own]->ReadUnlock();
+    while (!over_claim.empty()) {
+      locks[over_claim.front()]->ReadUnlock();
+    }
     return;
   }
 
@@ -1680,7 +1725,6 @@ int main() {
     task7.join();
     task8.join();
   }
-  std::this_thread::sleep_for(std::chrono::seconds(1));
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> diff = end - start;
   std::cout << "Time to execute: " << diff.count() << " s\n";
