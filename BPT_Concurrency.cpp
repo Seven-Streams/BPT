@@ -7,12 +7,12 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <map>
 #include <mutex>
 #include <shared_mutex>
 #include <sstream>
 #include <string>
 #include <thread>
-#include <map>
 const unsigned long long exp1 = 13331, exp2 = 131;
 const int minus_max = -2147483648;
 const int maxn = 2147483647;
@@ -1578,53 +1578,46 @@ public:
 namespace sjtu {
 class ReadWriteLock {
 private:
-  std::mutex protection;
-  std::shared_mutex my_mutex;
-  std::condition_variable_any my_cv;
-  std::atomic_bool is_writing = 0;
+  std::mutex my_mutex;
+  std::condition_variable my_cv;
+  std::atomic_bool is_writing = false;
   sjtu::list<std::thread::id> my_queue;
   std::atomic_int is_reading = 0;
 
 public:
   ReadWriteLock() = default;
   void ReadLock() {
-    auto id = std::this_thread::get_id();
-    std::unique_lock protect(protection);
-    my_queue.push_back(id);
-    protect.unlock();
-    my_mutex.lock_shared();
-    my_cv.wait(my_mutex,
-               [&] { return (!is_writing) && (id == my_queue.front()); });
-    protect.lock();
+    std::unique_lock lock(my_mutex);
+    my_queue.push_back(std::this_thread::get_id());
+    my_cv.wait(lock, [&] {
+      return (!is_writing) && (std::this_thread::get_id() == my_queue.front());
+    });
     is_reading++;
     my_queue.pop_front();
-    protect.unlock();
+    my_cv.notify_all();
     return;
   }
   void WriteLock() {
-    auto id = std::this_thread::get_id();
-    std::unique_lock protect(protection);
-    my_queue.push_back(id);
-    protect.unlock();
-    my_mutex.lock();
-    my_cv.wait(my_mutex, [&] {
-      return (!is_writing) && (id == my_queue.front()) && (!is_reading);
+    std::unique_lock lock(my_mutex);
+    my_queue.push_back(std::this_thread::get_id());
+    my_cv.wait(lock, [&] {
+      return ((!is_writing) &&
+              (std::this_thread::get_id() == my_queue.front()) &&
+              (!is_reading));
     });
-    protect.lock();
     is_writing = true;
     my_queue.pop_front();
-    protect.unlock();
     return;
   }
   void ReadUnlock() {
+    std::unique_lock lock(my_mutex);
     is_reading--;
-    my_mutex.unlock_shared();
     my_cv.notify_all();
     return;
   }
   void WriteUnlock() {
+    std::unique_lock lock(my_mutex);
     is_writing = false;
-    my_mutex.unlock();
     my_cv.notify_all();
     return;
   }
@@ -1636,6 +1629,31 @@ public:
   }
 };
 } // namespace sjtu
+// namespace sjtu {
+// class ReadWriteLock {
+// private:
+//   std::shared_mutex my_mutex;
+
+// public:
+//   ReadWriteLock() = default;
+//   void ReadLock() {
+//     my_mutex.lock_shared();
+//     return;
+//   }
+//   void WriteLock() {
+//     my_mutex.lock();
+//     return;
+//   }
+//   void ReadUnlock() {
+//     my_mutex.unlock_shared();
+//     return;
+//   }
+//   void WriteUnlock() {
+//     my_mutex.unlock();
+//     return;
+//   }
+// };
+// } // namespace sjtu
 template <class W, int info_len = 3> class MemoryRiver { // 应当采取3个参数。
   // 一个存储目前的元素个数，一个存储目前的根节点，一个存储当前的块应该写入到哪里。
 private:
@@ -1788,34 +1806,6 @@ private:
   sjtu::list<Node> mycache;
   MemoryRiver<Node, 3> mydatabase;
   MemoryRiver<int, 1> myrecycle;
-  void CheckDataUsing(MyData const &target) {
-    busy_lock.WriteLock();
-    if (is_using.find(target) != is_using.end()) {
-      is_using[target]->WriteLock();
-      std::cout << "OK" << std::endl;
-    } else {
-      is_using[target] = new sjtu::ReadWriteLock();
-      is_using[target]->WriteLock();
-      std::cout << "OK" << std::endl;
-    }
-    busy_lock.WriteUnlock();
-    return;
-  }
-  void ReleaseDataUsing(MyData const &target) {
-    busy_lock.WriteLock();
-    if (is_using[target]->Empty()) {
-      is_using[target]->WriteUnlock();
-      std::cout << "OK2" << std::endl;
-      delete is_using[target];
-      is_using.erase(is_using.find(target));
-    } else {
-      is_using[target]->WriteUnlock();
-      std::cout << "OK2" << std::endl;
-    }
-    busy_lock.WriteUnlock();
-
-    return;
-  }
   Node ReadwithCache(int pos) {
     std::unique_lock guard(cache_lock);
     for (auto it = mycache.begin(); it != mycache.end(); it++) {
@@ -2435,8 +2425,6 @@ public:
     a.hash1 = hash1;
     a.hash2 = hash2;
     a.value = value;
-    CheckDataUsing(a);
-    std::cout << hash2 << std::endl;
     if (B_total == 0) {
       empty_lock.WriteLock();
       if (!B_total) {
@@ -2457,7 +2445,6 @@ public:
         WritewithCache(res1);
         locks[1]->WriteUnlock();
         empty_lock.WriteUnlock();
-        ReleaseDataUsing(a);
         return;
       }
       empty_lock.WriteUnlock();
@@ -2476,7 +2463,6 @@ public:
       B_total++;
     }
     // locks[1]->CheckStatus();
-    ReleaseDataUsing(a);
     return;
   }
   void find(const unsigned long long &hash_1,
@@ -2591,12 +2577,10 @@ public:
     to_delete.value = value;
     to_delete_valid = to_delete;
     // std::cout << "ROOT" << B_root << std::endl;
-    CheckDataUsing(to_delete_valid);
     if (!B_total) {
       empty_lock.WriteLock();
       if (!B_total) {
         empty_lock.WriteUnlock();
-        ReleaseDataUsing(to_delete_valid);
         return;
       }
       empty_lock.WriteUnlock();
@@ -2607,19 +2591,10 @@ public:
         B_total--;
       }
       root_protection.WriteUnlock();
-      ReleaseDataUsing(to_delete_valid);
       return;
     }
     if (NodeErase(B_root, 0, to_delete, 0, 0) != false) {
       B_total--;
-    }
-    ReleaseDataUsing(to_delete_valid);
-    return;
-  }
-  void Check() {
-    for (int i = 0; i < 10000; i++) {
-      std::cout << i << ' ';
-      locks[i]->CheckStatus();
     }
     return;
   }
@@ -2689,7 +2664,7 @@ int main() {
   int n;
   n = std::stoi(res);
   for (int i = 0; i < n / 8; i++) {
-    // std::cout << i << std::endl;
+    std::cout << i << std::endl;
     std::string command;
     std::getline(std::cin, command);
     std::thread task1(Listen, command, 8 * i + 1);
