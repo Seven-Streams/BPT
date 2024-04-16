@@ -1478,7 +1478,7 @@ public:
     }
     while ((hash_1 == res.datas[found].hash1) &&
            (hash_2 == res.datas[found].hash2)) {
-      std::cout << res.datas[found].value << ' ';
+      std::cout << res.datas[found].value << std::endl;
       found++;
       if (found == res.now_size) {
         if (res.right_sibling == 0) {
@@ -1511,7 +1511,8 @@ int main() {
   std::cin.tie(0);
   std::cout.tie(0);
   // auto start = std::chrono::high_resolution_clock::now();
-  // freopen("t.txt", "r", stdin);
+  freopen("t4.txt", "r", stdin);
+  freopen("single.txt", "w", stdout);
   BPT<int> test("database");
   int n;
   std::cin >> n;
