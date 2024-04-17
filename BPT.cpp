@@ -619,7 +619,7 @@ public:
     delete (this->array)[ind];
     std::memmove(array + ind, array + ind + 1, sizeof(T *) * (total - ind - 1));
     total--;
-    if (total <= (array_size >> 2)) {
+    if (total <= (array_size / 4)) {
       ShrinkArray();
     }
     return iterator(ind, this);
@@ -637,7 +637,7 @@ public:
       throw(3);
     }
     total--;
-    if (total <= (array_size >> 2)) {
+    if (total <= (array_size / 4)) {
       ShrinkArray();
     }
     return;
@@ -682,7 +682,7 @@ public:
     if (n > info_len)
       return;
     file.open(file_name);
-    file.seekg((n - 1) << 2);
+    file.seekg((n - 1) * sizeof(int));
     file.read(reinterpret_cast<char *>(&tmp), sizeof(int));
     file.close();
     return;
@@ -693,7 +693,7 @@ public:
     if (n > info_len)
       return;
     file.open(file_name);
-    file.seekp((n - 1) << 2, std::fstream::beg);
+    file.seekp((n - 1) * sizeof(int), std::fstream::beg);
     file.write(reinterpret_cast<char *>(&tmp), sizeof(int));
     file.close();
     return;
@@ -703,7 +703,7 @@ public:
   // 位置索引意味着当输入正确的位置索引index，在以下三个函数中都能顺利的找到目标对象进行操作
   // 位置索引index可以取为对象写入的起始位置,1base
   void write(W &t, int which_node, int size = 1) {
-    int place = info_len << 2;
+    int place = info_len * 4;
     place += (which_node - 1) * sizeofT;
     file.open(file_name);
     file.seekp(place);
@@ -730,7 +730,7 @@ inline unsigned long long MyHash(const std::string &txt,
   }
   return ans;
 }
-template <class Value = int, int size = 100, int cachesize = 10000> class BPT {
+template <class Value = int, int size = 150, int cachesize = 100> class BPT {
 private:
   struct MyData {
     unsigned long long hash1 = 0;
@@ -1478,7 +1478,7 @@ public:
     }
     while ((hash_1 == res.datas[found].hash1) &&
            (hash_2 == res.datas[found].hash2)) {
-      std::cout << res.datas[found].value << std::endl;
+      std::cout << res.datas[found].value << ' ';
       found++;
       if (found == res.now_size) {
         if (res.right_sibling == 0) {
@@ -1501,6 +1501,12 @@ public:
     to_delete.value = value;
     if (NodeErase(B_root, 0, to_delete, 0, 0) != false) {
       B_total--;
+      Node to_check;
+      ReadwithCache(to_check, B_root);
+      if(to_check.now_size == 1 && (B_total != 1)) {
+        recycle.push_back(B_root);
+        B_root = to_check.datas[0].son;
+      }
     }
     return;
   }
@@ -1511,8 +1517,7 @@ int main() {
   std::cin.tie(0);
   std::cout.tie(0);
   // auto start = std::chrono::high_resolution_clock::now();
-  freopen("t4.txt", "r", stdin);
-  freopen("single.txt", "w", stdout);
+  // freopen("t.txt", "r", stdin);
   BPT<int> test("database");
   int n;
   std::cin >> n;
