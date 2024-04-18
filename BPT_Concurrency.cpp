@@ -655,9 +655,9 @@ class ReadWriteLock {
 private:
   std::mutex my_mutex;
   std::condition_variable my_cv;
-  std::atomic_bool is_writing = false;
+  bool is_writing = false;
   sjtu::list<std::thread::id> my_queue;
-  std::atomic_int is_reading = 0;
+  int is_reading = 0;
 
 public:
   ReadWriteLock() = default;
@@ -1480,6 +1480,13 @@ public:
     }
   }
   ~BPT() {
+    Node to_check;
+    to_check = ReadwithCache(B_root);
+    while((to_check.now_size == 1) && (to_check.datas[0].son != 0)) {
+      recycle.push_back(B_root);
+      B_root = to_check.datas[0].son;
+      to_check = ReadwithCache(B_root);
+    }
     mydatabase.write_info(B_total, 1);
     mydatabase.write_info(B_root, 2);
     mydatabase.write_info(B_current, 3);
@@ -1650,7 +1657,6 @@ public:
     to_delete.hash1 = hash_1;
     to_delete.hash2 = hash_2;
     to_delete.value = value;
-    to_delete_valid = to_delete;
     // std::cout << "ROOT" << B_root << std::endl;
     if (!B_total) {
       empty_lock.WriteLock();

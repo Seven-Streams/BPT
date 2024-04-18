@@ -730,7 +730,7 @@ inline unsigned long long MyHash(const std::string &txt,
   }
   return ans;
 }
-template <class Value = int, int size = 150, int cachesize = 100> class BPT {
+template <class Value = int, int size = 170, int cachesize = 100> class BPT {
 private:
   struct MyData {
     unsigned long long hash1 = 0;
