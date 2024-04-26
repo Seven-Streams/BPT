@@ -1,5 +1,6 @@
 #include "utility.hpp"
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstring>
 #include <filesystem>
@@ -1482,7 +1483,7 @@ public:
   ~BPT() {
     Node to_check;
     to_check = ReadwithCache(B_root);
-    while((to_check.now_size == 1) && (to_check.datas[0].son != 0)) {
+    while ((to_check.now_size == 1) && (to_check.datas[0].son != 0)) {
       recycle.push_back(B_root);
       B_root = to_check.datas[0].son;
       to_check = ReadwithCache(B_root);
@@ -1612,7 +1613,7 @@ public:
     }
     while ((hash_1 == res.datas[found].hash1) &&
            (hash_2 == res.datas[found].hash2)) {
-      std::cout << res.datas[found].value << std::endl;
+      std::cout << res.datas[found].value << ' ';
       found++;
       if (found == res.now_size) {
         if (res.right_sibling == 0) {
@@ -1698,38 +1699,60 @@ std::string ProcessTxt(std::string &txt) {
   return tmp;
 }
 BPT<int> test("database");
-void Listen(std::string txt, int number) {
-  std::string op;
-  op = ProcessTxt(txt);
-  if (op == "insert") {
-    std::string index;
-    int value;
-    index = ProcessTxt(txt);
-    value = std::stoi(ProcessTxt(txt));
-    unsigned long long hash1, hash2;
-    hash1 = MyHash(index, exp1);
-    hash2 = MyHash(index, exp2);
-    test.Insert(hash1, hash2, value);
-    return;
+std::thread threads[7];
+std::atomic_bool is_free[7];
+sjtu::list<std::string> commands;
+std::mutex commands_protection;
+std::string GetCommand() {
+  commands_protection.lock();
+  if (commands.empty()) {
+    commands_protection.unlock();
+    throw("Done.");
   }
-  if (op == "find") {
-    std::string index;
-    index = ProcessTxt(txt);
-    unsigned long long hash1, hash2;
-    hash1 = MyHash(index, exp1);
-    hash2 = MyHash(index, exp2);
-    test.find(hash1, hash2);
-    return;
-  }
-  if (op == "delete") {
-    std::string index;
-    int value;
-    index = ProcessTxt(txt);
-    value = std::stoi(ProcessTxt(txt));
-    unsigned long long hash1, hash2;
-    hash1 = MyHash(index, exp1);
-    hash2 = MyHash(index, exp2);
-    test.Erase(hash1, hash2, value);
+  std::string task = commands.front();
+  commands.pop_front();
+  commands_protection.unlock();
+  return task;
+}
+void Listen() {
+  try {
+    while (true) {
+      std::string op;
+      std::string txt = GetCommand();
+      op = ProcessTxt(txt);
+      if (op == "insert") {
+        std::string index;
+        int value;
+        index = ProcessTxt(txt);
+        value = std::stoi(ProcessTxt(txt));
+        unsigned long long hash1, hash2;
+        hash1 = MyHash(index, exp1);
+        hash2 = MyHash(index, exp2);
+        test.Insert(hash1, hash2, value);
+        continue;
+      }
+      if (op == "find") {
+        std::string index;
+        index = ProcessTxt(txt);
+        unsigned long long hash1, hash2;
+        hash1 = MyHash(index, exp1);
+        hash2 = MyHash(index, exp2);
+        test.find(hash1, hash2);
+        continue;
+      }
+      if (op == "delete") {
+        std::string index;
+        int value;
+        index = ProcessTxt(txt);
+        value = std::stoi(ProcessTxt(txt));
+        unsigned long long hash1, hash2;
+        hash1 = MyHash(index, exp1);
+        hash2 = MyHash(index, exp2);
+        test.Erase(hash1, hash2, value);
+        continue;
+      }
+    }
+  } catch (...) {
     return;
   }
 }
@@ -1737,43 +1760,35 @@ int main() {
   std::ios::sync_with_stdio(false);
   std::cin.tie(0);
   std::cout.tie(0);
-  // auto start = std::chrono::high_resolution_clock::now();
+  auto start = std::chrono::high_resolution_clock::now();
+  int hardware = std::thread::hardware_concurrency();
+  hardware = hardware ? hardware - 1 : 1;
   freopen("t4.txt", "r", stdin);
   freopen("multi.txt", "w", stdout);
-  std::string res;
-  std::getline(std::cin, res);
-  int n;
-  n = std::stoi(res);
-  for (int i = 0; i < n / 8; i++) {
-    std::cout << i << std::endl;
-    std::string command;
-    std::getline(std::cin, command);
-    std::thread task1(Listen, command, 8 * i + 1);
-    std::getline(std::cin, command);
-    std::thread task2(Listen, command, 8 * i + 2);
-    std::getline(std::cin, command);
-    std::thread task3(Listen, command, 8 * i + 3);
-    std::getline(std::cin, command);
-    std::thread task4(Listen, command, 8 * i + 4);
-    std::getline(std::cin, command);
-    std::thread task5(Listen, command, 8 * i + 5);
-    std::getline(std::cin, command);
-    std::thread task6(Listen, command, 8 * i + 6);
-    std::getline(std::cin, command);
-    std::thread task7(Listen, command, 8 * i + 7);
-    std::getline(std::cin, command);
-    std::thread task8(Listen, command, 8 * i + 8);
-    task1.join();
-    task2.join();
-    task3.join();
-    task4.join();
-    task5.join();
-    task6.join();
-    task7.join();
-    task8.join();
+  std::string first;
+  std::getline(std::cin, first);
+  int num = std::stoi(first);
+  for (int i = 1; i <= num; i++) {
+    std::string res;
+    std::getline(std::cin, res);
+    commands.push_back(res);
   }
-  // auto end = std::chrono::high_resolution_clock::now();
-  // std::chrono::duration<double> diff = end - start;
-  // std::cout << "Time to execute: " << diff.count() << " s\n";
+  auto now = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> diff = now - start;
+  std::cout << "Time to execute: " << diff.count() << " s\n";
+  for (int i = 0; i < 7; i++) {
+    threads[i] = std::thread(Listen);
+  }
+  now = std::chrono::high_resolution_clock::now();
+  diff = now - start;
+  std::cout << "Time to execute: " << diff.count() << " s\n";
+  for (int i = 0; i < 7; i++) {
+    if (threads[i].joinable()) {
+      threads[i].join();
+    }
+  }
+  auto end = std::chrono::high_resolution_clock::now();
+  diff = end - start;
+  std::cout << "Time to execute: " << diff.count() << " s\n";
   return 0;
 }

@@ -1516,8 +1516,9 @@ int main() {
   std::ios::sync_with_stdio(false);
   std::cin.tie(0);
   std::cout.tie(0);
-  // auto start = std::chrono::high_resolution_clock::now();
-  // freopen("t.txt", "r", stdin);
+  auto start = std::chrono::high_resolution_clock::now();
+  freopen("t4.txt", "r", stdin);
+  freopen("single.txt", "w", stdout);
   BPT<int> test("database");
   int n;
   std::cin >> n;
@@ -1556,9 +1557,8 @@ int main() {
       continue;
     }
   }
-  // std::this_thread::sleep_for(std::chrono::seconds(1));
-  // auto end = std::chrono::high_resolution_clock::now();
-  // std::chrono::duration<double> diff = end - start;
-  // std::cout << "Time to execute: " << diff.count() << " s\n";
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> diff = end - start;
+  std::cout << "Time to execute: " << diff.count() << " s\n";
   return 0;
 }
