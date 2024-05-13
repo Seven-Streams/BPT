@@ -733,7 +733,6 @@ public:
 template <class W, int info_len = 3> class MemoryRiver { // 应当采取3个参数。
   // 一个存储目前的元素个数，一个存储目前的根节点，一个存储当前的块应该写入到哪里。
 private:
-  std::mutex file_mutex;
   std::fstream file;
   std::string file_name;   // 文件名。
   int sizeofT = sizeof(W); // W的大小。
@@ -765,7 +764,6 @@ public:
 
   // 读出第n个int的值赋给tmp，1_base
   void get_info(int &tmp, int n) {
-    std::unique_lock my_lock(file_mutex);
     if (n > info_len)
       return;
     file.open(file_name);
@@ -777,7 +775,6 @@ public:
 
   // 将tmp写入第n个int的位置，1_base
   void write_info(int tmp, int n) {
-    std::unique_lock my_lock(file_mutex);
     if (n > info_len)
       return;
     file.open(file_name);
@@ -791,7 +788,6 @@ public:
   // 位置索引意味着当输入正确的位置索引index，在以下三个函数中都能顺利的找到目标对象进行操作
   // 位置索引index可以取为对象写入的起始位置,1base
   void write(W &t, int which_node, int size = 1) {
-    std::unique_lock my_lock(file_mutex);
     int place = info_len * 4;
     place += (which_node - 1) * sizeofT;
     file.open(file_name);
@@ -801,7 +797,6 @@ public:
     return;
   }
   void read(W &t, int which_node, int size = 1) {
-    std::unique_lock my_lock(file_mutex);
     int place = info_len * 4;
     place += (which_node - 1) * sizeofT;
     file.open(file_name);
@@ -940,7 +935,7 @@ private:
     res = ReadwithCache(pos);
     if (last_node == 0) {
       if (((res.now_size > (size - 10)) && B_total < size) || (B_total < 10) ||
-          (res.now_size == size) || (res.now_size == 1)) {
+          (res.now_size == (size - 1)) || (res.now_size == 1)) {
         root_safe = false;
       } else {
         root_safe = true;
@@ -972,7 +967,7 @@ private:
       locks[res.datas[find].son]->WriteLock();
       to_check = ReadwithCache(res.datas[find].son);
       locks[res.datas[find].son]->WriteUnlock();
-      if (to_check.now_size < (size - 10)) {
+      if (to_check.now_size < (size - 1)) {
         locks[pos]->WriteUnlock();
         NodeInsert(to_insert, res.datas[find].son, res.pos, res);
         return;
@@ -1074,8 +1069,8 @@ private:
     Node res;
     res = ReadwithCache(pos);
     if (last_pos == 0) {
-      if (((res.now_size > (size - 10)) && B_total < size) || (B_total < 10) ||
-          (res.now_size == size) || (res.now_size == 1)) {
+      if (((res.now_size > (size - 2)) && B_total < size) || (B_total < 10) ||
+          (res.now_size == (size - 1)) || (res.now_size == 1)) {
         root_safe = false;
       } else {
         root_safe = true;
@@ -1707,7 +1702,7 @@ std::string GetCommand() {
   commands_protection.lock();
   if (commands.empty()) {
     commands_protection.unlock();
-    throw("Done.");
+    return "No";
   }
   std::string task = commands.front();
   commands.pop_front();
@@ -1715,45 +1710,44 @@ std::string GetCommand() {
   return task;
 }
 void Listen() {
-  try {
-    while (true) {
-      std::string op;
-      std::string txt = GetCommand();
-      op = ProcessTxt(txt);
-      if (op == "insert") {
-        std::string index;
-        int value;
-        index = ProcessTxt(txt);
-        value = std::stoi(ProcessTxt(txt));
-        unsigned long long hash1, hash2;
-        hash1 = MyHash(index, exp1);
-        hash2 = MyHash(index, exp2);
-        test.Insert(hash1, hash2, value);
-        continue;
-      }
-      if (op == "find") {
-        std::string index;
-        index = ProcessTxt(txt);
-        unsigned long long hash1, hash2;
-        hash1 = MyHash(index, exp1);
-        hash2 = MyHash(index, exp2);
-        test.find(hash1, hash2);
-        continue;
-      }
-      if (op == "delete") {
-        std::string index;
-        int value;
-        index = ProcessTxt(txt);
-        value = std::stoi(ProcessTxt(txt));
-        unsigned long long hash1, hash2;
-        hash1 = MyHash(index, exp1);
-        hash2 = MyHash(index, exp2);
-        test.Erase(hash1, hash2, value);
-        continue;
-      }
+  while (true) {
+    std::string op;
+    std::string txt = GetCommand();
+    op = ProcessTxt(txt);
+    if (op == "insert") {
+      std::string index;
+      int value;
+      index = ProcessTxt(txt);
+      value = std::stoi(ProcessTxt(txt));
+      unsigned long long hash1, hash2;
+      hash1 = MyHash(index, exp1);
+      hash2 = MyHash(index, exp2);
+      test.Insert(hash1, hash2, value);
+      continue;
     }
-  } catch (...) {
-    return;
+    if (op == "find") {
+      std::string index;
+      index = ProcessTxt(txt);
+      unsigned long long hash1, hash2;
+      hash1 = MyHash(index, exp1);
+      hash2 = MyHash(index, exp2);
+      test.find(hash1, hash2);
+      continue;
+    }
+    if (op == "delete") {
+      std::string index;
+      int value;
+      index = ProcessTxt(txt);
+      value = std::stoi(ProcessTxt(txt));
+      unsigned long long hash1, hash2;
+      hash1 = MyHash(index, exp1);
+      hash2 = MyHash(index, exp2);
+      test.Erase(hash1, hash2, value);
+      continue;
+    }
+    if (op == "No") {
+      return;
+    }
   }
 }
 int main() {
@@ -1786,6 +1780,9 @@ int main() {
     if (threads[i].joinable()) {
       threads[i].join();
     }
+    now = std::chrono::high_resolution_clock::now();
+    diff = now - start;
+    std::cout << "Time to execute: " << diff.count() << " s\n";
   }
   auto end = std::chrono::high_resolution_clock::now();
   diff = end - start;
