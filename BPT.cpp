@@ -2026,7 +2026,7 @@ private:
             Node parent;
             ReadwithCache(parent, last_pos);
             int i = parent.Equal(0, parent.now_size, x);
-            if (i > 0) {
+            if (i >= 0) {
               if (i != (parent.now_size - 1)) {
                 std::memmove(&parent.datas[i], &parent.datas[i + 1],
                              (parent.now_size - i - 1) * sizeof(MyData));
@@ -2057,7 +2057,7 @@ private:
               auto to_change = res.datas[res.now_size];
               auto to_update = res.datas[res.now_size - 1];
               int i = parent.Equal(0, parent.now_size, to_change);
-              if (i > 0) {
+              if (i >= 0) {
                 to_update.son = parent.datas[i].son;
                 parent.datas[i] = to_update;
                 WritewithCache(parent, last_pos);
@@ -2085,7 +2085,7 @@ private:
               Node parent;
               ReadwithCache(parent, last_pos);
               int i = parent.Equal(0, parent.now_size, to_update);
-              if (i > 0) {
+              if (i >= 0) {
                 auto to_change = res.datas[res.now_size - 1];
                 to_change.son = parent.datas[i].son;
                 parent.datas[i] = to_change;
@@ -2110,7 +2110,7 @@ private:
               }
               auto to_update = res.datas[res.now_size - 1];
               i = parent.Equal(0, parent.now_size, to_update);
-              if (i > 0) {
+              if (i >= 0) {
                 parent.datas[i].son = pos;
               }
               WritewithCache(parent, last_pos);
@@ -2131,7 +2131,7 @@ private:
               Node parent;
               ReadwithCache(parent, last_pos);
               int i = parent.Equal(0, parent.now_size, to_erase);
-              if (i > 0) {
+              if (i >= 0) {
                 to_update.son = parent.datas[i].son;
                 parent.datas[i] = to_update;
                 WritewithCache(parent, last_pos);
@@ -2154,7 +2154,7 @@ private:
               Node parent;
               ReadwithCache(parent, last_pos);
               int i = parent.Equal(0, parent.now_size, to_change);
-              if (i > 0) {
+              if (i >= 0) {
                 to_update.son = parent.datas[i].son;
                 parent.datas[i] = to_update;
                 WritewithCache(parent, last_pos);
@@ -2180,7 +2180,7 @@ private:
               Node parent;
               ReadwithCache(parent, last_pos);
               int i = parent.Equal(0, parent.now_size, to_change);
-              if (i > 0) {
+              if (i >= 0) {
                 if (i != (parent.now_size - 1)) {
                   std::memmove(&parent.datas[i], &parent.datas[i + 1],
                                (parent.now_size - i - 1) * sizeof(MyData));
@@ -2199,7 +2199,7 @@ private:
             Node parent;
             ReadwithCache(parent, last_pos);
             int i = parent.Equal(0, parent.now_size, to_erase);
-            if (i > 0) {
+            if (i >= 0) {
               to_update.son = parent.datas[i].son;
               parent.datas[i] = to_update;
               WritewithCache(parent, last_pos);
