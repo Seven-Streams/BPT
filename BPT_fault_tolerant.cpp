@@ -57,7 +57,7 @@ public:
   }
   void clear(int reset) {
     file.open(file_name, std::ios::out);
-        int tmp = -1;
+    int tmp = -1;
     for (int i = 1; i <= info_len; i++) {
       file.write(reinterpret_cast<char *>(&tmp), sizeof(int));
     }
@@ -117,36 +117,47 @@ private:
     W data;
     int index = 0;
   };
-  MemoryRiver<ProtectedData, info_len + 1> redundency;
+  MemoryRiver<ProtectedData, info_len + 2> redundency[2];
 
 public:
   MemoryRiverPlus() = delete;
   MemoryRiverPlus(std::string name) {
     datas.ChangeName(name);
-    redundency.ChangeName2(name + "_protection");
-    int value;
-    redundency.get_info(value, 1);
-    if (value != -1) {
-      int total, root, current;
-      redundency.get_info(total, 2);
-      redundency.get_info(root, 3);
-      redundency.get_info(current, 4);
-      if (total != -1) {
-        datas.write_info(total, 1);
+    redundency[0].ChangeName2(name + "_protection1");
+    redundency[0].ChangeName2(name + "_protection2");
+    int value[2];
+    for (int i = 0; i < 2; i++) {
+      redundency[i].get_info(value[0], 1);
+      redundency[i].get_info(value[1], 2);
+      if (value[0] == value[1]) {
+        if (value[i] != -1) {
+          int total, root, current;
+          redundency[i].get_info(total, 3);
+          redundency[i].get_info(root, 4);
+          redundency[i].get_info(current, 5);
+          if (total != -1) {
+            datas.write_info(total, 1);
+          }
+          if (root != -1) {
+            datas.write_info(root, 2);
+          }
+          if (current != -1) {
+            datas.write_info(current, 3);
+          }
+          for (int j = 1; j <= value[0]; j++) {
+            ProtectedData res;
+            redundency[i].read(res, j);
+            datas.write(res.data, res.index);
+          }
+        }
+        break;
+      } else {
+        continue;
       }
-      if (root != -1) {
-        datas.write_info(root, 2);
-      }
-      if (current != -1) {
-        datas.write_info(current, 3);
-      }
-      for (int i = 1; i <= value; i++) {
-        ProtectedData res;
-        redundency.read(res, i);
-        datas.write(res.data, res.index);
-      }
-      redundency.clear(-1);
     }
+    redundency[1].clear(-1);
+    redundency[0].clear(-1);
+    return;
   }
   ~MemoryRiverPlus() = default;
   void get_info(int &tmp, int n) {
@@ -156,12 +167,17 @@ public:
   void write_info(int tmp, int n) {
     int save, sta;
     datas.get_info(save, n);
-    redundency.get_info(sta, 1);
+    redundency[0].get_info(sta, 1);
+    redundency[0].write_info(save, n + 1);
+    redundency[1].write_info(save, n + 1);
     if (sta == -1) {
-      redundency.write_info(0, 1);
+      redundency[0].write_info(0, 1);
+      redundency[0].write_info(0, 2);
+      redundency[1].write_info(0, 1);
+      redundency[1].write_info(0, 2);
     }
-    redundency.write_info(save, n + 1);
     datas.write_info(tmp, n);
+    return;
   }
   void read(W &t, int which_node) {
     datas.read(t, which_node);
@@ -169,25 +185,39 @@ public:
   }
   void write(W &t, int which_node) {
     int sta;
-    redundency.get_info(sta, 1);
+    redundency[0].get_info(sta, 1);
+    ProtectedData res;
+    W formal_data;
+    datas.read(formal_data, which_node);
+    res.data = formal_data;
+    res.index = which_node;
+    redundency[0].write(res, which_node);
+    redundency[1].write(res, which_node);
+    int value[info_len];
+    for (int i = 0; i < info_len; i++) {
+      datas.get_info(value[i], i);
+      redundency[0].write_info(value[i], i + 2);
+      redundency[1].write_info(value[i], i + 2);
+    }
     if (sta == -1) {
       sta = 1;
     } else {
       sta++;
     }
-    ProtectedData res;
-    res.data = t;
-    res.index = which_node;
-    redundency.write(res, which_node);
-    redundency.write_info(sta, 1);
+    redundency[0].write_info(sta, 1);
+    redundency[0].write_info(sta, 2);
+    redundency[1].write_info(sta, 1);
+    redundency[1].write_info(sta, 2);
     datas.write(t, which_node);
   }
   void reset() {
-    redundency.clear(-1);
+    redundency[0].clear(-1);
+    redundency[1].clear(-1);
     return;
   }
 };
-unsigned long long MyHash(const std::string &txt,const unsigned long long &exp) {
+unsigned long long MyHash(const std::string &txt,
+                          const unsigned long long &exp) {
   unsigned long long ans = 0;
   for (int i = 0; i < txt.size(); i++) {
     ans *= exp;
