@@ -56,12 +56,9 @@ public:
     return;
   }
   void clear(int reset) {
-    file.open(file_name, std::ios::out);
-    int tmp = -1;
-    for (int i = 1; i <= info_len; i++) {
-      file.write(reinterpret_cast<char *>(&tmp), sizeof(int));
+    for(int i = 1; i <= info_len; i++) {
+      write_info(-1, i);
     }
-    file.close();
     return;
   }
   // 读出第n个int的值赋给tmp，1_base
