@@ -1670,7 +1670,6 @@ public:
     return;
   }
   ~MemoryRiver() {
-    file.close();
     file.open(file_name + "_config");
     for (int i = 0; i < info_len; i++) {
       file.seekp(i * sizeof(int), std::fstream::beg);
@@ -1735,6 +1734,7 @@ public:
     file.open(file_name);
     file.seekg(place);
     file.read(reinterpret_cast<char *>(&t), sizeofT * size);
+    file.close();
     return;
   }
   void clear() {
@@ -1756,7 +1756,7 @@ inline unsigned long long MyHash(const std::string &txt,
   return ans;
 }
 template <class Value = int, int size = 168, int redundency = 6,
-          int cachesize = 20000>
+          int cachesize = 50000>
 class BPT {
 private:
   struct MyData {
